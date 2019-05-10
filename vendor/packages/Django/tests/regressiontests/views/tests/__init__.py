@@ -1,10 +1,10 @@
-from debug import *
-from defaults import *
-from generic.create_update import *
-from generic.date_based import *
-from generic.object_list import *
-from generic.simple import *
-from i18n import *
-from shortcuts import *
-from specials import *
-from static import *
+from __future__ import absolute_import
+
+from .debug import (DebugViewTests, ExceptionReporterTests,
+    ExceptionReporterTests, PlainTextReportTests, ExceptionReporterFilterTests,
+    AjaxResponseExceptionReporterFilter)
+from .defaults import DefaultsTests
+from .i18n import JsI18NTests, I18NTests, JsI18NTestsMultiPackage, JavascriptI18nTests
+from .shortcuts import ShortcutTests
+from .specials import URLHandling
+from .static import StaticHelperTest, StaticUtilsTests, StaticTests

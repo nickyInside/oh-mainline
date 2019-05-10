@@ -10,12 +10,16 @@ This example uses ``datetime.datetime.now`` as the default for the ``pub_date``
 field.
 """
 
-from django.db import models
 from datetime import datetime
 
+from django.db import models
+from django.utils.encoding import python_2_unicode_compatible
+
+
+@python_2_unicode_compatible
 class Article(models.Model):
     headline = models.CharField(max_length=100, default='Default headline')
     pub_date = models.DateTimeField(default=datetime.now)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.headline

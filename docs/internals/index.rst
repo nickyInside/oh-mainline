@@ -1,6 +1,6 @@
-=========
-Internals
-=========
+================
+Operations Guide
+================
 
 Here's more information about our project structure that may be useful.
 
@@ -12,8 +12,11 @@ Here's more information about our project structure that may be useful.
   backup
   emergency_operations
   wordpress
+  front_end_style_guide
   api
   pull_request_linting
+  issue_tracking
+  security
 
 Sections to add:
 

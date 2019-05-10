@@ -17,7 +17,7 @@
 from django.core.management.base import BaseCommand
 import mysite.customs.core_bugimporters
 import yaml
-from django.utils import simplejson
+import json
 import logging
 
 
@@ -26,11 +26,23 @@ def jsonlines_decoder(f):
         if line.endswith('\n'):
             line = line[:-1]
         try:
-            yield simplejson.loads(line)
+            yield json.loads(line)
         except Exception:
-            logging.exception("simplejson decode failed")
+            logging.exception("json decode failed")
             logging.error("repr(line) was: %s", repr(line))
             continue
+
+
+# It may seem a little weird to have this function when
+# import_one_bug_item() exists just fine. See the test called
+# test_mgmt_command_doesnt_crash_if_import_one_crashes() to understand
+# why this function exists.
+def _import_one(bug_dict):
+    try:
+        mysite.customs.core_bugimporters.import_one_bug_item(
+            bug_dict)
+    except Exception:
+        logging.exception("Failed to process one bug_dict %s", bug_dict)
 
 
 class Command(BaseCommand):
@@ -41,7 +53,7 @@ class Command(BaseCommand):
         for filename in args:
             with open(filename) as f:
                 if filename.endswith('.json'):
-                    bug_dicts = simplejson.load(f)
+                    bug_dicts = json.load(f)
                 elif filename.endswith('.jsonlines'):
                     bug_dicts = jsonlines_decoder(f)
                 else:
@@ -49,5 +61,4 @@ class Command(BaseCommand):
                     s = f.read()
                     bug_dicts = yaml.loads(s)
                 for bug_dict in bug_dicts:
-                    mysite.customs.core_bugimporters.import_one_bug_item(
-                        bug_dict)
+                    _import_one(bug_dict)

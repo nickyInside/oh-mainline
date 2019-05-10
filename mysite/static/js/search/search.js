@@ -18,6 +18,8 @@
 */
 
 $.fn.toggleExpanded = function() {
+    var expandLink = this.find('.expand-link');
+    expandLink.text(expandLink.text() == "expand" ? "collapse" : "expand");
     this.toggleClass('expanded');
     return this;
 };
@@ -28,8 +30,21 @@ SearchResults.bindEventHandlers = function () {
 
     console.log('SearchResults.bindEventHandlers');
 
-    $('.project__name, .first-line').click(function () {
+    $('body.actually_search .project__name, body.actually_search .first-line')
+     .click(function () {
             $result = $(this.parentNode.parentNode);
+            $result.toggleExpanded();
+            // don't use this, so that links work return false;
+            });
+
+    $('body.bugsets .project__name').click(function () {
+            $result = $(this.parentNode.parentNode);
+            $result.toggleExpanded();
+            // don't use this, so that links work return false;
+            });
+
+    $('body.bugsets .expand').click(function () {
+            $result = $(this.parentNode.parentNode.parentNode.parentNode);
             $result.toggleExpanded();
             // don't use this, so that links work return false;
             });
@@ -42,11 +57,13 @@ SearchResults.bindEventHandlers = function () {
 
     $('#expand-all-link').click(function() {
             $('#results li').addClass('expanded');
+            $('.expand-link').text('collapse');
             return false;
             });
 
     $('#collapse-all-link').click(function() {
             $('#results li').removeClass('expanded');
+            $('.expand-link').text('expand');
             return false;
             });
 

@@ -1,35 +1,36 @@
+sudo: false
+
 language: python
 python:
-  - "2.6"
-  - "2.7"
+  - 2.7
 env:
-  - USE_MYSQL=true
-  - USE_MYSQL=
+  - USE_POSTGRES=true
+  - USE_POSTGRES=
 
 services:
-  - mysql
+  - postgres
 
 matrix:
   allow_failures:
-    - env: USE_MYSQL=true
+    - env: USE_POSTGRES=true
 
 install:
-# Install coveralls to test code coverage
- - sudo pip install coveralls
-# Copy libz.so into the virtualenv so that PIL can build PNG support
- - sudo cp /usr/lib/*/libz.so $VIRTUAL_ENV/lib
-# command to run tests
+ - pip install --upgrade pip
+ - pip install coveralls
+ - pip install codecov
+ - cp /usr/lib/*/libz.so $VIRTUAL_ENV/lib
+
 script: coverage run --source="mysite" manage.py test
-# Get development headers for PIL
+
 before_install:
- - deactivate # We are having problems with using Pillow in a virtualenv
- - sudo apt-get update -qq
- - sudo apt-get build-dep -qq python-imaging
- - sudo apt-get install libjpeg-dev python-mysqldb
+ - pip install -r requirements.txt
  - git config --global user.name TravisDummy
- - git config --global user.email dummy@travis-ci.orgo
+ - git config --global user.email dummy@travis-ci.org
+
 
 before_script:
-  - mysql -e 'create database oh_milestone_a'
+  - psql -c 'create database openhatch' -U postgres
 
-after_success: coveralls
+after_success:
+  - coveralls
+  - codecov

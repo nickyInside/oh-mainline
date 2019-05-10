@@ -32,6 +32,7 @@ class TrackerTypesForm(django.forms.Form):
         ('launchpad', 'Launchpad'),
         ('roundup', 'Roundup'),
         ('trac', 'Trac'),
+        ('tigris', 'Tigris'),
     )
     tracker_type = django.forms.ChoiceField(choices=TRACKER_TYPES,
                                             widget=django.forms.Select(attrs={
@@ -142,7 +143,7 @@ class LaunchpadTrackerForm(TrackerFormThatHidesCreatedForProject):
 
 class GitHubTrackerForm(TrackerFormThatHidesCreatedForProject):
     github_url = django.forms.RegexField(
-        regex=r'^https?:\/\/github.com\/[\_\-\w]+\/[\_\-\w]+$',
+        regex=r'^https?:\/\/github.com\/[a-zA-Z0-9\-]+\/[\-\w.]+$',
         max_length=200,
         required=True,
         help_text='This is the url of the GitHub project.',
@@ -158,7 +159,7 @@ class GitHubTrackerForm(TrackerFormThatHidesCreatedForProject):
         github_url = self.cleaned_data['github_url']
 
         github_name_repo = re.match(
-            r'^https?:\/\/github.com\/([\_\-\w]+)\/([\_\-\w]+)$',
+            r'^https?:\/\/github.com\/([a-zA-Z0-9\-]+)\/([\-\w.]+)$',
             github_url
         )
 
@@ -198,3 +199,15 @@ class GitHubTrackerForm(TrackerFormThatHidesCreatedForProject):
 
         # Return the "upstream" return value
         return obj
+
+class TigrisTrackerForm(TrackerFormThatHidesCreatedForProject):
+
+    class Meta:
+        model = mysite.customs.models.TigrisTrackerModel
+
+class TigrisQueryForm(django.forms.ModelForm):
+
+    class Meta:
+        model = mysite.customs.models.TigrisQueryModel
+        exclude = ('tracker', 'last_polled',)
+

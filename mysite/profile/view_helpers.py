@@ -17,17 +17,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os.path
+import datetime
 import hashlib
 from itertools import cycle, islice
-
-import pygeoip
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q
 import django.core.mail
 import django.core.serializers
-from django.utils import simplejson
+import json
 
 import logging
 import mysite.search.view_helpers
@@ -56,120 +55,6 @@ def roundrobin(*iterables):
             pending -= 1
             nexts = cycle(islice(nexts, pending))
 
-
-class RecommendBugs(object):
-
-    def __init__(self, terms, n):
-        self.terms = terms
-        self.n = n
-
-    def get_cache_key(self):
-        prefix = 'bug_recommendation_cache_'
-        bug_timestamp = mysite.base.models.Timestamp.get_timestamp_for_string(
-            str(mysite.search.models.Bug))
-        suffix_input = [self.terms, self.n, bug_timestamp]
-        return prefix + '_' + hashlib.sha1(repr(suffix_input)).hexdigest()
-
-    def is_cache_empty(self):
-        return cache.get(self.get_cache_key()) == None
-
-    def recommend(self):
-        ret = []
-        for bug_id in self._recommend_as_list():
-            try:
-                bug = mysite.search.models.Bug.all_bugs.get(pk=bug_id)
-            except mysite.search.models.Bug.DoesNotExist:
-                logging.info("WTF, bug missing. Whatever.")
-                continue
-            ret.append(bug)
-        return ret
-
-    @mysite.base.decorators.cache_method('get_cache_key')
-    def _recommend_as_list(self):
-        return list(self._recommend_as_generator())
-
-    def _recommend_as_generator(self):
-        '''Input: A list of terms, like ['Python', 'C#'], designed for use in the search engine.
-
-        I am a generator that yields Bug objects.
-        I yield up to n Bugs in a round-robin fashion.
-        I don't yield a Bug more than once.'''
-
-        distinct_ids = set()
-
-        lists_of_bugs = [
-            mysite.search.view_helpers.order_bugs(
-                mysite.search.view_helpers.Query(terms=[t]).get_bugs_unordered())
-            for t in self.terms]
-        number_emitted = 0
-
-        for bug in roundrobin(*lists_of_bugs):
-            if number_emitted >= self.n:
-                raise StopIteration
-            if bug.id in distinct_ids:
-                continue
-            # otherwise...
-            number_emitted += 1
-            distinct_ids.add(bug.id)
-            yield bug.id
-
-geoip_database = None
-
-
-def geoip_city_database_available():
-    return os.path.exists(settings.DOWNLOADED_GEOLITECITY_PATH)
-
-
-def get_geoip_guess_for_ip(ip_as_string):
-    # initialize database
-    global geoip_database
-    if geoip_database is None:
-        system_geoip_path = '/usr/share/GeoIP/GeoIP.dat'
-        downloaded_geolitecity_path = os.path.join(
-            settings.MEDIA_ROOT,
-            '../../downloads/GeoLiteCity.dat')
-        if os.path.exists(system_geoip_path):
-            geoip_database = pygeoip.GeoIP(system_geoip_path)
-        if os.path.exists(settings.DOWNLOADED_GEOLITECITY_PATH):
-            geoip_database = pygeoip.GeoIP(downloaded_geolitecity_path)
-
-    if geoip_database is None:  # still?
-        logging.warn("Uh, we could not find the GeoIP database.")
-        return False, u''
-
-    # First, get the country. This works on both the GeoCountry
-    # and the GeoLiteCity database.
-    country_name = geoip_database.country_name_by_addr(ip_as_string)
-
-    # Try to increase our accuracy if we have the GeoLiteCity database.
-    try:
-        all_data_about_this_ip = geoip_database.record_by_addr(ip_as_string)
-    except pygeoip.GeoIPError:
-        return True, unicode(country_name, 'latin-1')
-
-    if all_data_about_this_ip is None:
-        return False, ''
-
-    gimme = lambda x: all_data_about_this_ip.get(x, '')
-
-    pieces = [gimme('city')]
-
-    # Only add the region name if it's a string. Otherwise we add numbers to
-    # the location, which can be confusing.
-    region_name = gimme('region_name')
-    try:
-        int(region_name)
-    except ValueError:
-        pieces.append(region_name)
-
-    pieces.append(gimme('country_name'))
-
-    as_string = ', '.join([p for p in pieces if p])
-    as_unicode = unicode(as_string, 'Latin-1')
-
-    if as_unicode:
-        return True, as_unicode
-    return False, u''
 
 
 def parse_string_query(s):
@@ -231,6 +116,12 @@ Sincerely,
     msg.send()
 
 
+def encode_datetime(obj):
+    if isinstance(obj, datetime.datetime):
+        return obj.strftime('%Y-%m-%dT%H:%M:%SZ')
+    raise TypeError(repr(o) + " is not JSON serializable")
+
+
 def send_user_export_to_admins(u):
     '''You might want to call this function before deleting a user.
 
@@ -242,8 +133,7 @@ def send_user_export_to_admins(u):
     * training an antispam tool
 
     * recovering data on a user'''
-    body = simplejson.dumps(generate_user_export(u),
-                            cls=django.core.serializers.json.DjangoJSONEncoder)
+    body = json.dumps(generate_user_export(u), default=encode_datetime)
     msg = django.core.mail.EmailMessage(subject="User export for %d" % u.id,
                                         body=body,
                                         to=[email

@@ -15,13 +15,14 @@ of spatially enabled data.
    :maxdepth: 2
 
    tutorial
-   install
+   install/index
    model-api
    db-api
    geoquerysets
    measure
    geos
    gdal
+   geoip
    utils
    commands
    admin

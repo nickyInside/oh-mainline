@@ -2,7 +2,7 @@
 Contact Us
 =============
 
-Talk to us on IRC (#openhatch on irc.freenode.net).  Not familiar with IRC? See below!
+Talk to us on IRC (#openhatch on irc.freenode.net).  Not familiar with IRC? See **Chat with us on IRC** below!
 
 Join our `contributors mailing list <http://lists.openhatch.org/mailman/listinfo/devel>`_.
 
@@ -21,8 +21,10 @@ You can usually find us on #openhatch on irc.freenode.net - a friendly place to 
 If you don't know how to use IRC, you can `use our installation guide <https://openhatch.org/wiki/OSCTC/Laptop_setup#Goal_.231:_install_an_IRC_client>`_ or just click on `this link to a web
 chat interface <http://webchat.freenode.net/?channels=#openhatch>`_.
 
+Also, there's an excellent FAQ at `botbot.me <https://botbot.me/irc-guide/>`_
+
 Are you trying to figure out who everybody is? Many of the people are part of
-the `OpenHatch project <http://openhatch.org/+projects/OpenHatch>`_.
+the `OpenHatch project <http://openhatch.org/projects/OpenHatch>`_.
 
 
 Quick start

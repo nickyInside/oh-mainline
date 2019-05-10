@@ -5,8 +5,8 @@ How we handle contributions
 We use git/Github to handle contributions.  If you're new to git, you may
 appreciate `this guide <https://openhatch.org/wiki/Git_Basics#Create_pull_request>`_.
 
-As a pull request submitter
-===========================
+As a contributor
+================
 
 Creating a pull request
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -60,7 +60,7 @@ Submitting a pull request
     2. Change the issue status to "need-review".
     3. Join IRC and say that you have an issue ready for review.
 
-The pull request will be checked for code style errors (such as `pep8`_ violations) by the lint-review bot. To know more about the bot, see `Checking code style errors in pull requests with lint-review`_.
+The pull request will be checked for code style errors (such as `pep8`_ violations) by the lint-review bot. To know more about the bot, see `Checking coding style errors in pull requests with lint-review`_.
 
 If the reviewer says it's ready to go, your request will get merged in short
 order. If the reviewer has feedback he/she wants addressed, make the necessary
@@ -83,8 +83,8 @@ Permit us to share your work
         can be shared under the terms of CC Zero 1.0.
 
 
-As a contribution reviewer
-==========================
+As a reviewer
+=============
 
 Apply the pull request to your local repository
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -113,6 +113,17 @@ Things to think about:
        "in-progress", re-assign the issue to the pull request submitter if
        it isn't already, and leave your review feedback on the pull request.
 
+    4. After leaving the revisions in the comments, you may optionally leave a
+       note to the author regarding expectations on when or if the pull request
+       will be worked on further. You may use the below example::
+
+        To add an arbitrary (but perhaps useful for planning) time
+        bounded-ness, is this addressing the above something you'd be
+        interested in doing over the next 3 days? If not, I can take care of
+        it after that. If you're interested in being the one to do so, but you
+        know you need more than 3 days is not long enough, that is fine; just
+        say so, and we're happy to wait for you to perfect these changes.
+
 
 Push and deploy
 ~~~~~~~~~~~~~~~
@@ -127,7 +138,7 @@ person to do this, but it's good to ask someone else so they get practice!
 
 Things to know:
 
-    * If you push to origin/master, Jenkins will test it.
+    * If you push to origin/master, Travis CI will test it.
     * Once you're happy, you can run the deploy script, but note that will push
       the current HEAD to origin/master. ::
 
@@ -137,8 +148,7 @@ Things to know:
 
     * When you deploy, check a page or two to make sure things are okay.
 
-For more details on how we use Jenkins and how to force a Jenkins build, see
-`Continuous integration with Jenkins and Travis CI`_.
+For more details on how we use Continuous Integration and Travis CI, see
+`Continuous integration`_.
 
-.. _Login team: https://openhatch.org/wiki/Login_team
-.. _Continuous integration with Jenkins and Travis CI: ../internals/continuous_integration.html
+.. _Continuous integration: ../internals/continuous_integration.html

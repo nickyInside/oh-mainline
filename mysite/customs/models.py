@@ -128,6 +128,7 @@ class TrackerModel(models.Model):
             mysite.customs.models.RoundupTrackerModel: 'roundup',
             mysite.customs.models.TracTrackerModel: 'trac',
             mysite.customs.models.LaunchpadTrackerModel: 'launchpad',
+            mysite.customs.models.TigrisTrackerModel: 'tigris',
         }
         out_dict['bugimporter'] = CLASS_NAME2SIMPLE_NAME[self.__class__]
 
@@ -248,7 +249,7 @@ class BugzillaTrackerModel(TrackerModel):
     tracker_name = models.CharField(max_length=200, unique=True,
                                     blank=False, null=False)
     base_url = models.URLField(max_length=200, unique=True,
-                               blank=False, null=False, verify_exists=False,
+                               blank=False, null=False,
                                help_text="This is the URL to the homepage of the Bugzilla tracker instance. Remove any homepage filenames such as 'index.cgi' from this.")
     bug_project_name_format = models.CharField(max_length=200, blank=False,
                                                help_text="Any string here will be used verbatim as the project name for each bug aside from the keys '{tracker_name}', '{component}' and '{product}', which are replaced with the tracker's name from above and the relevant data from each individual bug respectively.")
@@ -353,6 +354,9 @@ class GoogleTrackerModel(TrackerModel):
 
     all_trackers = models.Manager()
 
+    BUG_STATUS_OPEN = 2
+    BUG_STATUS_ALL = 1
+
     def __str__(self):
         return smart_str('%s' % (self.tracker_name))
 
@@ -363,11 +367,10 @@ class GoogleTrackerModel(TrackerModel):
             'last_polled__min']
         if lowest_last_polled is None:
             lowest_last_polled = datetime.datetime(1970, 1, 1)
-        query_data = {u'can': u'all',
-                      u'updated-min': unicode(lowest_last_polled.isoformat())}
-        query_url = google_query_url(self.google_name,
-                                     **query_data)
+
+        query_url = google_query_url(self.google_name, can=self.BUG_STATUS_ALL)
         out['get_older_bug_data'] = query_url
+
         return out
 
     def get_base_url(self):
@@ -375,13 +378,29 @@ class GoogleTrackerModel(TrackerModel):
 
 
 def google_query_url(project_name, **kwargs):
-    extra_data = {u'max-results': u'10000',
-                  u'can': u'open',
-                  }
+    extra_data = {
+        u'num': 1000,  # 1000 is the maximum we can fetch
+        u'can': GoogleTrackerModel.BUG_STATUS_OPEN,
+        u'colspec': ' '.join((
+            'ID',
+            'Status',
+            'Priority',
+            'Owner',
+            'Summary',
+            'Stars',
+            'Opened',
+            'Closed',
+            'Reporter',
+            'Cc',
+            'Difficulty',
+            'Modified',
+            'Type',
+        )),
+    }
     extra_data.update(kwargs)
-    base = 'https://code.google.com/feeds/issues/p/%s/issues/full' % (project_name,)
-    url = base + '?' + http.urlencode(extra_data)
-    return url
+
+    base = 'https://code.google.com/p/{project}/issues/csv'.format(project=project_name)
+    return '{url}?{params}'.format(url=base, params=http.urlencode(extra_data))
 
 
 class GoogleQueryModel(TrackerQueryModel):
@@ -437,7 +456,7 @@ class TracTrackerModel(TrackerModel):
     tracker_name = models.CharField(max_length=200, unique=True,
                                     blank=False, null=False)
     base_url = models.URLField(max_length=200, unique=True,
-                               blank=False, null=False, verify_exists=False,
+                               blank=False, null=False,
                                help_text="This is the URL to the homepage of the Trac tracker instance. Remove any subpaths like 'ticket/' or 'query' from this.")
     bug_project_name_format = models.CharField(max_length=200, blank=False,
                                                help_text="Any string here will be used verbatim as the project name for each bug aside from the keys '{tracker_name}' and '{component}', which are replaced with the tracker's name from above and the relevant data from each individual bug respectively.")
@@ -502,7 +521,7 @@ class RoundupTrackerModel(TrackerModel):
                                     blank=False, null=False,
                                     help_text="This is the name that OpenHatch will use to identify the project.")
     base_url = models.URLField(max_length=200, unique=True,
-                               blank=False, null=False, verify_exists=False,
+                               blank=False, null=False,
                                help_text="This is the URL to the homepage of the Roundup tracker instance. Remove any subpaths like 'issue42' or 'user37' from this.")
     closed_status = models.CharField(max_length=200, blank=False,
                                      help_text="This is the text that the 'Status' field will contain that indicates a bug is closed. For multiple values to mean 'closed', separate with commas.")
@@ -705,7 +724,7 @@ class JiraTrackerModel(TrackerModel):
     tracker_name = models.CharField(max_length=200, unique=True,
                                     blank=False, null=False)
     base_url = models.URLField(max_length=200, unique=True,
-                               blank=False, null=False, verify_exists=False,
+                               blank=False, null=False,
                                help_text="This is the URL to the homepage of the Jira instance, i.e http://jira.cyanogenmod.org")
     bug_project_name_format = models.CharField(max_length=200, blank=False,
                                                help_text="Any string here will be used verbatim as the project name for each bug aside from the keys '{tracker_name}' and '{component}', which are replaced with the tracker's name from above and the relevant data from each individual bug respectively.")
@@ -774,3 +793,73 @@ class JiraQueryModel(TrackerQueryModel):
 
 reversion.register(JiraTrackerModel, follow=["jiraquerymodel_set"])
 reversion.register(JiraQueryModel)
+
+class TigrisTrackerModel(TrackerModel):
+
+    '''This model stores the data for individual Tigris trackers.'''
+    tracker_name = models.CharField(max_length=200, unique=True,
+                                    blank=False, null=False)
+    base_url = models.URLField(max_length=200, unique=True,
+                               blank=False, null=False,
+                               help_text="This is the URL to the issues page "
+                               "of the Tigris tracker instance. Remove any "
+                               "filenames such as 'xml.cgi', example: "
+                               "'http://scons.tigris.org/issues'.")
+
+    # Metadata about the TrackerModel.
+    short_name = 'tigris'
+    namestr = 'Tigris'
+    _form = 'mysite.customs.forms.TigrisTrackerForm'
+    _urlmodel = 'mysite.customs.models.TigrisQueryModel'
+    _urlform = 'mysite.customs.forms.TigrisQueryForm'
+
+    BITESIZED_TYPES = (
+        ('key', 'Keyword'),
+        ('wboard', 'Whiteboard tag'),
+    )
+    bitesized_type = models.CharField(
+        max_length=10, choices=BITESIZED_TYPES, blank=True)
+    bitesized_text = models.CharField(max_length=200, blank=True, default='',
+                                      help_text="This is the text that the field type selected above will contain that indicates a bite-sized bug. Separate multiple values with single commas (,) only.")
+    DOCUMENTATION_TYPES = (
+        ('key', 'Keyword'),
+        ('comp', 'Component'),
+        ('subcomp', 'Subcomponent'),
+        ('prod', 'Product'),
+    )
+    documentation_type = models.CharField(
+        max_length=10, choices=DOCUMENTATION_TYPES, blank=True)
+    documentation_text = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text="This is the text that the field type selected above will contain that indicates a documentation bug. Separate multiple values with single commas (,) only.")
+
+    all_trackers = models.Manager()
+
+    def __str__(self):
+        return smart_str('%s' % (self.tracker_name))
+
+    def get_base_url(self):
+        return self.base_url
+
+class TigrisQueryModel(TrackerQueryModel):
+    ''' This model stores queries for TigrisTracker objects.
+        At present we allow only a startid as additional parameter.
+    '''
+    startid = models.CharField(max_length=200, blank=True, default='',
+                               help_text="The start ID (smallest number) for the "
+                               "download. Leave blank for autodetection, "
+                               "or enter an integer value.")
+    description = models.CharField(max_length=200, blank=True, default='',
+                                   help_text="Optional description of this query.")
+    tracker = models.ForeignKey(TigrisTrackerModel)
+
+    def get_query_url(self):
+        base = '/'.join([self.tracker.get_base_url(), 'xml.cgi'])
+        if self.startid:
+            extra_data = {u'id': unicode(self.startid)}
+            return base + '?' + http.urlencode(extra_data)
+        return base
+
+reversion.register(TigrisTrackerModel, follow=["tigrisquerymodel_set"])
+reversion.register(TigrisQueryModel)
+

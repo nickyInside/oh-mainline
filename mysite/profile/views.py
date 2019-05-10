@@ -24,7 +24,7 @@
 import StringIO
 import datetime
 import urllib
-from django.utils import simplejson
+import json
 import re
 import collections
 import logging
@@ -49,7 +49,7 @@ import mysite.profile.view_helpers
 from mysite.profile.models import \
     Person, Tag, TagType, \
     Link_Project_Tag, Link_Person_Tag, \
-    DataImportAttempt, PortfolioEntry, Citation
+    PortfolioEntry, Citation
 from mysite.search.models import Project
 from mysite.base.decorators import view, as_view
 import mysite.profile.forms
@@ -57,7 +57,7 @@ import mysite.profile.tasks
 from mysite.base.view_helpers import render_response
 from django.views.decorators.csrf import csrf_protect
 
-# }}}
+logger = logging.getLogger(__name__)
 
 
 @login_required
@@ -102,8 +102,8 @@ def add_citation_manually_do(request):
         citation.is_published = True
         citation.save()
 
-        json = simplejson.dumps(output)
-        return HttpResponse(json, mimetype='application/json')
+        json_from_object = json.dumps(output)
+        return HttpResponse(json_from_object, mimetype='application/json')
 
     else:
         error_msgs = []
@@ -111,8 +111,8 @@ def add_citation_manually_do(request):
             error_msgs.extend(eval(error.__repr__()))  # don't ask questions.
 
         output['error_msgs'] = error_msgs
-        json = simplejson.dumps(output)
-        return HttpResponseServerError(json, mimetype='application/json')
+        json_from_object = json.dumps(output)
+        return HttpResponseServerError(json_from_object, mimetype='application/json')
 
     #}}}
 
@@ -208,7 +208,7 @@ def widget_display_js(request, user_to_display__username):
     # FIXME: In the future, use:
     html_doc = widget_display_string(request, user_to_display__username)
     # to generate html_doc
-    encoded_for_js = simplejson.dumps(html_doc)
+    encoded_for_js = json.dumps(html_doc)
     # Note: using application/javascript as suggested by
     # http://www.ietf.org/rfc/rfc4329.txt
     return render_response(request, 'base/append_ourselves.js',
@@ -473,7 +473,6 @@ def gimme_json_for_portfolio(request):
     "Get JSON used to live-update the portfolio editor."
     """JSON includes:
         * The person's data.
-        * DataImportAttempts.
         * other stuff"""
 
     # Since this view is meant to be accessed asynchronously, it doesn't make
@@ -507,40 +506,21 @@ def gimme_json_for_portfolio(request):
 
     five_minutes_ago = datetime.datetime.utcnow() - \
         datetime.timedelta(minutes=5)
-    recent_dias = DataImportAttempt.objects.filter(
-        person=person, date_created__gt=five_minutes_ago)
-    recent_dias_json = simplejson.loads(
-        serializers.serialize('json', recent_dias))
-    portfolio_entries = simplejson.loads(serializers.serialize('json',
+    portfolio_entries = json.loads(serializers.serialize('json',
                                                                portfolio_entries_unserialized))
-    projects = simplejson.loads(
+    projects = json.loads(
         serializers.serialize('json', projects_unserialized))
     # FIXME: Don't send like all the flippin projects down the tubes.
-    citations = simplejson.loads(serializers.serialize('json', citations))
+    citations = json.loads(serializers.serialize('json', citations))
 
-    recent_dias_that_are_completed = recent_dias.filter(completed=True)
-    import_running = recent_dias.count() > 0 and (
-        recent_dias_that_are_completed.count() != recent_dias.count())
-    progress_percentage = 100
-    if import_running:
-        progress_percentage = int(
-            recent_dias_that_are_completed.count() * 100.0 / recent_dias.count())
-    import_data = {
-        'running': import_running,
-        'progress_percentage': progress_percentage,
-    }
-
-    json = simplejson.dumps({
-        'dias': recent_dias_json,
-        'import': import_data,
+    portfolio_json = json.dumps({
         'citations': citations,
         'portfolio_entries': portfolio_entries,
         'projects': projects,
         'summaries': summaries,
-        'messages': request.user.get_and_delete_messages(),
     })
 
-    return HttpResponse(json, mimetype='application/json')
+    return HttpResponse(portfolio_json, mimetype='application/json')
 
 
 def replace_icon_with_default(request):
@@ -579,56 +559,10 @@ def replace_icon_with_default(request):
     data['portfolio_entry__pk'] = portfolio_entry.pk
     return mysite.base.view_helpers.json_response(data)
 
-
-@login_required
-@csrf_exempt
-def prepare_data_import_attempts_do(request):
-    """
-    Input: request.POST contains a list of usernames or email addresses.
-    These are identifiers under which the authorized user has committed code
-    to an open-source repository, or at least so says the user.
-
-    Side-effects: Create DataImportAttempts that a user might want to execute.
-
-    Not yet implemented: This means, don't show the user DIAs that relate to
-    non-existent accounts on remote networks. And what *that* means is,
-    before bothering the user, ask those networks beforehand if they even
-    have accounts named identifiers[0], etc."""
-    # {{{
-
-    # For each commit identifier, prepare some DataImportAttempts.
-    prepare_data_import_attempts(
-        identifiers=request.POST.values(), user=request.user)
-
-    return HttpResponse('1')
-    # }}}
-
-
-def prepare_data_import_attempts(identifiers, user):
-    "Enqueue and track importation tasks."
-    """Expected input: A list of committer identifiers, e.g.:
-    ['paulproteus', 'asheesh@asheesh.org']
-
-    For each data source, enqueue a background task.
-    Keep track of information about the task in an object
-    called a DataImportAttempt."""
-
-    # Side-effects: Create DIAs that a user might want to execute.
-    for identifier in identifiers:
-        if identifier.strip():  # Skip blanks or whitespace
-            for source_key, _ in DataImportAttempt.SOURCE_CHOICES:
-                dia = DataImportAttempt(
-                    query=identifier,
-                    source=source_key,
-                    person=user.get_profile())
-                dia.save()
-
-
 @login_required
 @view
 def importer(request, test_js=False):
-    """Get the DIAs for the logged-in user's profile. Pass them to the template."""
-    # {{{
+    """Get the logged-in user's profile. Pass them to the template."""
 
     person = request.user.get_profile()
     data = get_personal_data(person)
@@ -648,11 +582,6 @@ def importer(request, test_js=False):
 # FIXME: Rename importer
 portfolio_editor = importer
 
-
-def portfolio_editor_test(request):
-    return portfolio_editor(request, test_js=True)
-
-
 def filter_by_key_prefix(dict, prefix):
     """Return those and only those items in a dictionary whose keys have the given prefix."""
     out_dict = {}
@@ -660,41 +589,6 @@ def filter_by_key_prefix(dict, prefix):
         if key.startswith(prefix):
             out_dict[key] = value
     return out_dict
-
-
-@login_required
-def user_selected_these_dia_checkboxes(request):
-    """ Input: Request POST contains a list of checkbox IDs corresponding to DIAs.
-    Side-effect: Make a note on the DIA that its affiliated person wants it.
-    Output: Success?
-    """
-    # {{{
-
-    prepare_data_import_attempts(request.POST, request.user)
-
-    checkboxes = filter_by_key_prefix(request.POST, "person_wants_")
-    identifiers = filter_by_key_prefix(request.POST, "identifier_")
-
-    for checkbox_id, value in checkboxes.items():
-        if value == 'on':
-            x, y, identifier_index, source_key = checkbox_id.split('_')
-            identifier = identifiers["identifier_%s" % identifier_index]
-            if identifier:
-                # FIXME: For security, ought this filter include only dias
-                # associated with the logged-in user's profile?
-                dia = DataImportAttempt(
-                    identifier, source_key,
-                    request.user.get_profile())
-                dia.person_wants_data = True
-                dia.save()
-
-                # There may be data waiting or not,
-                # but no matter; this function may
-                # run unconditionally.
-                dia.give_data_to_person()
-
-    return HttpResponse('1')
-    # }}}
 
 
 @login_required
@@ -886,50 +780,23 @@ def set_pfentries_dot_use_my_description_do(request):
                     prefix=str(pfe_pk))
         if form.is_valid():
             pfe_after_save = form.save()
-            logging.info("Project description settings edit: %s just edited a project.  The portfolioentry's data originally read as follows: %s.  Its data now read as follows: %s" % (
+            logger.info("Project description settings edit: %s just edited a project.  The portfolioentry's data originally read as follows: %s.  Its data now read as follows: %s" % (
                 request.user.get_profile(), pfe_before_save.__dict__, pfe_after_save.__dict__))
     return HttpResponseRedirect(project.get_url())
 
 
 @view
 def unsubscribe(request, token_string):
-    context = {'unsubscribe_this_user':
-               mysite.profile.models.UnsubscribeToken.whose_token_string_is_this(
-                   token_string),
+    context = {'unsubscribe_this_user': mysite.profile.models.UnsubscribeToken.whose_token_string_is_this(token_string),
                'token_string': token_string}
     return (request, 'unsubscribe.html', context)
 
 
 def unsubscribe_do(request):
     token_string = request.POST.get('token_string', None)
-    person = mysite.profile.models.UnsubscribeToken.whose_token_string_is_this(
-        token_string)
+    logger.debug("token_string is %s", token_string)
+    person = mysite.profile.models.UnsubscribeToken.whose_token_string_is_this(token_string)
+    logger.debug("person is %s", person)
     person.email_me_re_projects = False
     person.save()
     return HttpResponseRedirect(reverse(unsubscribe, kwargs={'token_string': token_string}))
-
-
-@login_required
-def bug_recommendation_list_as_template_fragment(request):
-    suggested_searches = request.user.get_profile(
-    ).get_recommended_search_terms()
-    recommender = mysite.profile.view_helpers.RecommendBugs(
-        suggested_searches, n=5)
-    recommended_bugs = list(recommender.recommend())
-
-    response_data = {}
-
-    if recommended_bugs:
-        response_data['result'] = 'OK'
-        template_path = 'base/recommended_bugs_content.html'
-        context = RequestContext(
-            request, {'recommended_bugs': recommended_bugs})
-        response_data['html'] = render_to_string(template_path, context)
-    else:
-        response_data['result'] = 'NO_BUGS'
-
-    return HttpResponse(simplejson.dumps(response_data), mimetype='application/json')
-
-# API-y views go below here
-
-# vim: ai ts=3 sts=4 et sw=4 nu

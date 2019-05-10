@@ -1,11 +1,19 @@
-from django.conf import settings
-from django.db import connection, DEFAULT_DB_ALIAS
-from django.test import TestCase, skipUnlessDBFeature
-from django.utils import functional
+from __future__ import absolute_import, unicode_literals
 
-from models import Reporter, Article
+from functools import update_wrapper
 
-#
+from django.db import connection
+from django.test import TestCase, skipUnlessDBFeature, skipIfDBFeature
+from django.utils import six, unittest
+
+from .models import Reporter, Article
+
+if connection.vendor == 'oracle':
+    expectedFailureOnOracle = unittest.expectedFailure
+else:
+    expectedFailureOnOracle = lambda f: f
+
+
 # The introspection module is optional, so methods tested here might raise
 # NotImplementedError. This is perfectly acceptable behavior for the backend
 # in question, but the tests need to handle this without failing. Ideally we'd
@@ -15,7 +23,7 @@ from models import Reporter, Article
 # wrapper that ignores the exception.
 #
 # The metaclass is just for fun.
-#
+
 
 def ignore_not_implemented(func):
     def _inner(*args, **kwargs):
@@ -23,21 +31,22 @@ def ignore_not_implemented(func):
             return func(*args, **kwargs)
         except NotImplementedError:
             return None
-    functional.update_wrapper(_inner, func)
+    update_wrapper(_inner, func)
     return _inner
+
 
 class IgnoreNotimplementedError(type):
     def __new__(cls, name, bases, attrs):
-        for k,v in attrs.items():
+        for k, v in attrs.items():
             if k.startswith('test'):
                 attrs[k] = ignore_not_implemented(v)
         return type.__new__(cls, name, bases, attrs)
 
-class IntrospectionTests(TestCase):
-    __metaclass__ = IgnoreNotimplementedError
 
+class IntrospectionTests(six.with_metaclass(IgnoreNotimplementedError, TestCase)):
     def test_table_names(self):
         tl = connection.introspection.table_names()
+        self.assertEqual(tl, sorted(tl))
         self.assertTrue(Reporter._meta.db_table in tl,
                      "'%s' isn't in table_list()." % Reporter._meta.db_table)
         self.assertTrue(Article._meta.db_table in tl,
@@ -45,11 +54,22 @@ class IntrospectionTests(TestCase):
 
     def test_django_table_names(self):
         cursor = connection.cursor()
-        cursor.execute('CREATE TABLE django_ixn_test_table (id INTEGER);');
+        cursor.execute('CREATE TABLE django_ixn_test_table (id INTEGER);')
         tl = connection.introspection.django_table_names()
         cursor.execute("DROP TABLE django_ixn_test_table;")
         self.assertTrue('django_ixn_testcase_table' not in tl,
                      "django_table_names() returned a non-Django table")
+
+    def test_django_table_names_retval_type(self):
+        # Ticket #15216
+        cursor = connection.cursor()
+        cursor.execute('CREATE TABLE django_ixn_test_table (id INTEGER);')
+
+        tl = connection.introspection.django_table_names(only_existing=True)
+        self.assertIs(type(tl), list)
+
+        tl = connection.introspection.django_table_names(only_existing=False)
+        self.assertIs(type(tl), list)
 
     def test_installed_models(self):
         tables = [Article._meta.db_table, Reporter._meta.db_table]
@@ -76,6 +96,29 @@ class IntrospectionTests(TestCase):
             ['IntegerField', 'CharField', 'CharField', 'CharField', 'BigIntegerField']
         )
 
+    # The following test fails on Oracle due to #17202 (can't correctly
+    # inspect the length of character columns).
+    @expectedFailureOnOracle
+    def test_get_table_description_col_lengths(self):
+        cursor = connection.cursor()
+        desc = connection.introspection.get_table_description(cursor, Reporter._meta.db_table)
+        self.assertEqual(
+            [r[3] for r in desc if datatype(r[1], r) == 'CharField'],
+            [30, 30, 75]
+        )
+
+    # Oracle forces null=True under the hood in some cases (see
+    # https://docs.djangoproject.com/en/dev/ref/databases/#null-and-empty-strings)
+    # so its idea about null_ok in cursor.description is different from ours.
+    @skipIfDBFeature('interprets_empty_strings_as_nulls')
+    def test_get_table_description_nullable(self):
+        cursor = connection.cursor()
+        desc = connection.introspection.get_table_description(cursor, Reporter._meta.db_table)
+        self.assertEqual(
+            [r[6] for r in desc],
+            [False, False, False, False, True]
+        )
+
     # Regression test for #9991 - 'real' types in postgres
     @skipUnlessDBFeature('has_real_datatype')
     def test_postgresql_real_type(self):
@@ -96,10 +139,30 @@ class IntrospectionTests(TestCase):
             # That's {field_index: (field_index_other_table, other_table)}
             self.assertEqual(relations, {3: (0, Reporter._meta.db_table)})
 
+    def test_get_key_columns(self):
+        cursor = connection.cursor()
+        key_columns = connection.introspection.get_key_columns(cursor, Article._meta.db_table)
+        self.assertEqual(key_columns, [('reporter_id', Reporter._meta.db_table, 'id')])
+
+    def test_get_primary_key_column(self):
+        cursor = connection.cursor()
+        primary_key_column = connection.introspection.get_primary_key_column(cursor, Article._meta.db_table)
+        self.assertEqual(primary_key_column, 'id')
+
     def test_get_indexes(self):
         cursor = connection.cursor()
         indexes = connection.introspection.get_indexes(cursor, Article._meta.db_table)
         self.assertEqual(indexes['reporter_id'], {'unique': False, 'primary_key': False})
+
+    def test_get_indexes_multicol(self):
+        """
+        Test that multicolumn indexes are not included in the introspection
+        results.
+        """
+        cursor = connection.cursor()
+        indexes = connection.introspection.get_indexes(cursor, Reporter._meta.db_table)
+        self.assertNotIn('first_name', indexes)
+        self.assertIn('id', indexes)
 
 
 def datatype(dbtype, description):

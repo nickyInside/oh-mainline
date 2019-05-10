@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 from django.core.exceptions import ValidationError
-from django.forms.util import *
+from django.forms.util import flatatt, ErrorDict, ErrorList
+from django.test import TestCase
+from django.utils.safestring import mark_safe
+from django.utils import six
 from django.utils.translation import ugettext_lazy
-from django.utils.unittest import TestCase
+from django.utils.encoding import python_2_unicode_compatible
 
 
 class FormsUtilTestCase(TestCase):
@@ -13,9 +18,9 @@ class FormsUtilTestCase(TestCase):
         # flatatt #
         ###########
 
-        self.assertEqual(flatatt({'id': "header"}), u' id="header"')
-        self.assertEqual(flatatt({'class': "news", 'title': "Read this"}), u' class="news" title="Read this"')
-        self.assertEqual(flatatt({}), u'')
+        self.assertEqual(flatatt({'id': "header"}), ' id="header"')
+        self.assertEqual(flatatt({'class': "news", 'title': "Read this"}), ' class="news" title="Read this"')
+        self.assertEqual(flatatt({}), '')
 
     def test_validation_error(self):
         ###################
@@ -23,35 +28,40 @@ class FormsUtilTestCase(TestCase):
         ###################
 
         # Can take a string.
-        self.assertEqual(str(ErrorList(ValidationError("There was an error.").messages)),
+        self.assertHTMLEqual(str(ErrorList(ValidationError("There was an error.").messages)),
                          '<ul class="errorlist"><li>There was an error.</li></ul>')
 
         # Can take a unicode string.
-        self.assertEqual(str(ErrorList(ValidationError(u"Not \u03C0.").messages)),
+        self.assertHTMLEqual(six.text_type(ErrorList(ValidationError("Not \u03C0.").messages)),
                          '<ul class="errorlist"><li>Not π.</li></ul>')
 
         # Can take a lazy string.
-        self.assertEqual(str(ErrorList(ValidationError(ugettext_lazy("Error.")).messages)),
+        self.assertHTMLEqual(str(ErrorList(ValidationError(ugettext_lazy("Error.")).messages)),
                          '<ul class="errorlist"><li>Error.</li></ul>')
 
         # Can take a list.
-        self.assertEqual(str(ErrorList(ValidationError(["Error one.", "Error two."]).messages)),
+        self.assertHTMLEqual(str(ErrorList(ValidationError(["Error one.", "Error two."]).messages)),
                          '<ul class="errorlist"><li>Error one.</li><li>Error two.</li></ul>')
 
         # Can take a mixture in a list.
-        self.assertEqual(str(ErrorList(ValidationError(["First error.", u"Not \u03C0.", ugettext_lazy("Error.")]).messages)),
+        self.assertHTMLEqual(str(ErrorList(ValidationError(["First error.", "Not \u03C0.", ugettext_lazy("Error.")]).messages)),
                          '<ul class="errorlist"><li>First error.</li><li>Not π.</li><li>Error.</li></ul>')
 
+        @python_2_unicode_compatible
         class VeryBadError:
-            def __unicode__(self): return u"A very bad error."
+            def __str__(self): return "A very bad error."
 
         # Can take a non-string.
-        self.assertEqual(str(ErrorList(ValidationError(VeryBadError()).messages)),
+        self.assertHTMLEqual(str(ErrorList(ValidationError(VeryBadError()).messages)),
                          '<ul class="errorlist"><li>A very bad error.</li></ul>')
 
         # Escapes non-safe input but not input marked safe.
         example = 'Example of link: <a href="http://www.example.com/">example</a>'
-        self.assertEqual(str(ErrorList([example])),
+        self.assertHTMLEqual(str(ErrorList([example])),
                          '<ul class="errorlist"><li>Example of link: &lt;a href=&quot;http://www.example.com/&quot;&gt;example&lt;/a&gt;</li></ul>')
-        self.assertEqual(str(ErrorList([mark_safe(example)])),
+        self.assertHTMLEqual(str(ErrorList([mark_safe(example)])),
                          '<ul class="errorlist"><li>Example of link: <a href="http://www.example.com/">example</a></li></ul>')
+        self.assertHTMLEqual(str(ErrorDict({'name': example})),
+                         '<ul class="errorlist"><li>nameExample of link: &lt;a href=&quot;http://www.example.com/&quot;&gt;example&lt;/a&gt;</li></ul>')
+        self.assertHTMLEqual(str(ErrorDict({'name': mark_safe(example)})),
+                         '<ul class="errorlist"><li>nameExample of link: <a href="http://www.example.com/">example</a></li></ul>')

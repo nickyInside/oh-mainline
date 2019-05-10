@@ -16,7 +16,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from django.conf import settings
-import xmlrunner.extra.djangotestrunner
 import django.test.simple
 import tempfile
 import os
@@ -36,7 +35,6 @@ def generate_safe_temp_file_name():
 
 
 def override_settings_for_testing():
-    settings.CELERY_ALWAYS_EAGER = True
     settings.SVN_REPO_PATH = tempfile.mkdtemp(
         prefix='svn_repo_path_' +
         datetime.datetime.now().isoformat().replace(':', '.'))
@@ -45,6 +43,7 @@ def override_settings_for_testing():
     settings.POSTFIX_FORWARDER_TABLE_PATH = generate_safe_temp_file_name()
 
     svnserve_port = random.randint(50000, 50100)
+
     if mysite.base.depends.svnadmin_available():
         subprocess.check_call(['svnserve',
                                '--listen-port', str(svnserve_port),
@@ -55,8 +54,11 @@ def override_settings_for_testing():
                                '--root', settings.SVN_REPO_PATH])
     settings.SVN_REPO_URL_PREFIX = 'svn://127.0.0.1:%d/' % svnserve_port
 
+    logging.disable('NOTSET')
+
 
 def cleanup_after_tests():
+    logging.disable('CRITICAL')
     if mysite.base.depends.svnadmin_available():
         pidfile = os.path.join(settings.SVN_REPO_PATH, 'svnserve.pid')
         pid = int(open(pidfile).read().strip())
@@ -75,30 +77,12 @@ class OpenHatchTestRunner(django.test.simple.DjangoTestSuiteRunner):
             logging.info(
                 "You did not specify which tests to run. I will run all the OpenHatch-related ones.")
             args = (['base', 'profile', 'account', 'project',
-                    'missions', 'search', 'customs'],)
+                    'missions', 'search', 'customs', 'bugsets'],)
 
         override_settings_for_testing()
         n = 1
         try:
             n = super(OpenHatchTestRunner, self).run_tests(*args, **kwargs)
-        finally:
-            cleanup_after_tests()
-            sys.exit(n)
-
-
-class OpenHatchXMLTestRunner(xmlrunner.extra.djangotestrunner.XMLTestRunner):
-
-    def run_tests(self, *args, **kwargs):
-        if not args or not args[0]:
-            logging.info(
-                "You did not specify which tests to run. I will run all the OpenHatch-related ones.")
-            args = (['base', 'profile', 'account', 'project',
-                    'missions', 'search', 'customs'],)
-
-        override_settings_for_testing()
-        n = 1
-        try:
-            n = super(OpenHatchXMLTestRunner, self).run_tests(*args, **kwargs)
         finally:
             cleanup_after_tests()
             sys.exit(n)

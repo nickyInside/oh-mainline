@@ -11,7 +11,7 @@ can be found at `readthedocs.org <http://openhatch.readthedocs.org/>`_.
 
 The website is a Python+Django app with jQuery and CSS and HTML on the frontend, and aims for high test coverage (mostly succeeding) and high usability (though it is not there yet).  You can read more details about how the code is structured in `this document <https://github.com/openhatch/oh-mainline/blob/master/LAYOUT>`_, which we're working to improve.
 
-The best way to contact us about the website is to send an email to `our contributors list <http://lists.openhatch.org/mailman/listinfo/devel>`_ or find us at #openhatch on irc.freenode.net.  (`Other ways to contact us <http://openhatch.readthedocs.org/en/latest/contributor/contact.html>`_.)
+The best way to contact us about the website is to send an email to `our contributors list <http://lists.openhatch.org/mailman/listinfo/devel>`_ or find us at #openhatch on irc.freenode.net.  (`Other ways to contact us <http://openhatch.readthedocs.org/en/latest/community/contact.html>`_.)
 
 Other elements of the OpenHatch project:
 
@@ -63,7 +63,7 @@ Oppia-based rewrite of the training missions:
 
 "Greenhouse," a project to help open source projects greet new contributors:
   * code: https://github.com/openhatch/oh-greenhouse
-  * main contact: Dave (daveeloo) on http://lists.openhatch.org/devel or #openhatc on irc.freenode.net
+  * main contact: Dave (daveeloo) on http://lists.openhatch.org/devel or #openhatch on irc.freenode.net
   * Other lists used by the project: http://lists.openhatch.org/mailman/listinfo/greenhouse and http://lists.alioth.debian.org/mailman/listinfo/welcome-team
 
 

@@ -1,11 +1,13 @@
+from __future__ import absolute_import, unicode_literals
+
 import datetime
 
-from django.conf import settings
-from django.db import DEFAULT_DB_ALIAS
 from django.test import TestCase, skipIfDBFeature
-from django.utils import tzinfo
+from django.utils import six
+from django.utils.timezone import utc
 
-from models import Donut, RumBaba
+from .models import Donut, RumBaba
+
 
 class DataTypesTestCase(TestCase):
 
@@ -61,7 +63,7 @@ class DataTypesTestCase(TestCase):
         d2 = Donut.objects.create(name='Apple Fritter',
             consumed_at = datetime.datetime(year=2007, month=4, day=20, hour=16, minute=19, second=59))
 
-        self.assertEqual([u'Apple Fritter', u'Date Test 2007'],
+        self.assertEqual(['Apple Fritter', 'Date Test 2007'],
             list(Donut.objects.filter(consumed_at__year=2007).order_by('name').values_list('name', flat=True)))
 
         self.assertEqual(0, Donut.objects.filter(consumed_at__year=2005).count())
@@ -70,15 +72,15 @@ class DataTypesTestCase(TestCase):
     def test_textfields_unicode(self):
         """Regression test for #10238: TextField values returned from the
         database should be unicode."""
-        d = Donut.objects.create(name=u'Jelly Donut', review=u'Outstanding')
+        d = Donut.objects.create(name='Jelly Donut', review='Outstanding')
         newd = Donut.objects.get(id=d.id)
-        self.assertTrue(isinstance(newd.review, unicode))
+        self.assertTrue(isinstance(newd.review, six.text_type))
 
     @skipIfDBFeature('supports_timezones')
     def test_error_on_timezone(self):
         """Regression test for #8354: the MySQL and Oracle backends should raise
         an error if given a timezone-aware datetime object."""
-        dt = datetime.datetime(2008, 8, 31, 16, 20, tzinfo=tzinfo.FixedOffset(0))
+        dt = datetime.datetime(2008, 8, 31, 16, 20, tzinfo=utc)
         d = Donut(name='Bear claw', consumed_at=dt)
         self.assertRaises(ValueError, d.save)
         # ValueError: MySQL backend does not support timezone-aware datetimes.

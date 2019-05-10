@@ -1,25 +1,36 @@
+from __future__ import absolute_import, unicode_literals
+
 from datetime import date
 
 from django import forms
 from django.conf import settings
-from django.contrib.admin.options import ModelAdmin, TabularInline, \
-    HORIZONTAL, VERTICAL
+from django.contrib.admin.options import (ModelAdmin, TabularInline,
+     HORIZONTAL, VERTICAL)
 from django.contrib.admin.sites import AdminSite
 from django.contrib.admin.validation import validate
 from django.contrib.admin.widgets import AdminDateWidget, AdminRadioSelect
+from django.contrib.admin import (SimpleListFilter,
+     BooleanFieldListFilter)
 from django.core.exceptions import ImproperlyConfigured
 from django.forms.models import BaseModelFormSet
 from django.forms.widgets import Select
 from django.test import TestCase
-from django.utils import unittest
+from django.test.utils import str_prefix
+from django.utils import unittest, six
 
-from models import Band, Concert, ValidationTestModel, \
-    ValidationTestInlineModel
+from .models import Band, Concert, ValidationTestModel, ValidationTestInlineModel
 
 
-# None of the following tests really depend on the content of the request,
-# so we'll just pass in None.
-request = None
+class MockRequest(object):
+    pass
+
+
+class MockSuperUser(object):
+    def has_perm(self, perm):
+        return True
+
+request = MockRequest()
+request.user = MockSuperUser()
 
 
 class ModelAdminTests(TestCase):
@@ -37,7 +48,7 @@ class ModelAdminTests(TestCase):
     def test_default_fields(self):
         ma = ModelAdmin(Band, self.site)
 
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['name', 'bio', 'sign_date'])
 
     def test_default_fieldsets(self):
@@ -62,7 +73,7 @@ class ModelAdminTests(TestCase):
 
         ma = BandAdmin(Band, self.site)
 
-        self.assertEqual( ma.get_fieldsets(request),
+        self.assertEqual(ma.get_fieldsets(request),
             [(None, {'fields': ['name']})])
 
         self.assertEqual(ma.get_fieldsets(request, self.band),
@@ -80,8 +91,8 @@ class ModelAdminTests(TestCase):
             fields = ['name']
 
         ma = BandAdmin(Band, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(), ['name'])
-        self.assertEqual(ma.get_form(request, self.band).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields), ['name'])
+        self.assertEqual(list(ma.get_form(request, self.band).base_fields),
             ['name'])
 
         # Using `fieldsets`.
@@ -89,8 +100,8 @@ class ModelAdminTests(TestCase):
             fieldsets = [(None, {'fields': ['name']})]
 
         ma = BandAdmin(Band, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(), ['name'])
-        self.assertEqual(ma.get_form(request, self.band).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields), ['name'])
+        self.assertEqual(list(ma.get_form(request, self.band).base_fields),
             ['name'])
 
         # Using `exclude`.
@@ -98,7 +109,7 @@ class ModelAdminTests(TestCase):
             exclude = ['bio']
 
         ma = BandAdmin(Band, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['name', 'sign_date'])
 
         # You can also pass a tuple to `exclude`.
@@ -106,7 +117,7 @@ class ModelAdminTests(TestCase):
             exclude = ('bio',)
 
         ma = BandAdmin(Band, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['name', 'sign_date'])
 
         # Using `fields` and `exclude`.
@@ -115,8 +126,101 @@ class ModelAdminTests(TestCase):
             exclude = ['bio']
 
         ma = BandAdmin(Band, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['name'])
+
+    def test_custom_form_meta_exclude_with_readonly(self):
+        """
+        Ensure that the custom ModelForm's `Meta.exclude` is respected when
+        used in conjunction with `ModelAdmin.readonly_fields` and when no
+        `ModelAdmin.exclude` is defined.
+        Refs #14496.
+        """
+        # First, with `ModelAdmin` -----------------------
+
+        class AdminBandForm(forms.ModelForm):
+
+            class Meta:
+                model = Band
+                exclude = ['bio']
+
+        class BandAdmin(ModelAdmin):
+            readonly_fields = ['name']
+            form = AdminBandForm
+
+        ma = BandAdmin(Band, self.site)
+        self.assertEqual(list(ma.get_form(request).base_fields),
+            ['sign_date'])
+
+        # Then, with `InlineModelAdmin`  -----------------
+
+        class AdminConcertForm(forms.ModelForm):
+
+            class Meta:
+                model = Concert
+                exclude = ['day']
+
+        class ConcertInline(TabularInline):
+            readonly_fields = ['transport']
+            form = AdminConcertForm
+            fk_name = 'main_band'
+            model = Concert
+
+        class BandAdmin(ModelAdmin):
+            inlines = [
+                ConcertInline
+            ]
+
+        ma = BandAdmin(Band, self.site)
+        self.assertEqual(
+            list(list(ma.get_formsets(request))[0]().forms[0].fields),
+            ['main_band', 'opening_band', 'id', 'DELETE'])
+
+    def test_custom_form_meta_exclude(self):
+        """
+        Ensure that the custom ModelForm's `Meta.exclude` is overridden if
+        `ModelAdmin.exclude` or `InlineModelAdmin.exclude` are defined.
+        Refs #14496.
+        """
+        # First, with `ModelAdmin` -----------------------
+
+        class AdminBandForm(forms.ModelForm):
+
+            class Meta:
+                model = Band
+                exclude = ['bio']
+
+        class BandAdmin(ModelAdmin):
+            exclude = ['name']
+            form = AdminBandForm
+
+        ma = BandAdmin(Band, self.site)
+        self.assertEqual(list(ma.get_form(request).base_fields),
+            ['bio', 'sign_date'])
+
+        # Then, with `InlineModelAdmin`  -----------------
+
+        class AdminConcertForm(forms.ModelForm):
+
+            class Meta:
+                model = Concert
+                exclude = ['day']
+
+        class ConcertInline(TabularInline):
+            exclude = ['transport']
+            form = AdminConcertForm
+            fk_name = 'main_band'
+            model = Concert
+
+        class BandAdmin(ModelAdmin):
+            inlines = [
+                ConcertInline
+            ]
+
+        ma = BandAdmin(Band, self.site)
+        self.assertEqual(
+            list(list(ma.get_formsets(request))[0]().forms[0].fields),
+            ['main_band', 'opening_band', 'day', 'id', 'DELETE'])
 
     def test_custom_form_validation(self):
         # If we specify a form, it should use it allowing custom validation to work
@@ -132,12 +236,68 @@ class ModelAdminTests(TestCase):
             form = AdminBandForm
 
         ma = BandAdmin(Band, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['name', 'bio', 'sign_date', 'delete'])
 
         self.assertEqual(
             type(ma.get_form(request).base_fields['sign_date'].widget),
             AdminDateWidget)
+
+    def test_form_exclude_kwarg_override(self):
+        """
+        Ensure that the `exclude` kwarg passed to `ModelAdmin.get_form()`
+        overrides all other declarations. Refs #8999.
+        """
+
+        class AdminBandForm(forms.ModelForm):
+
+            class Meta:
+                model = Band
+                exclude = ['name']
+
+        class BandAdmin(ModelAdmin):
+            exclude = ['sign_date']
+            form = AdminBandForm
+
+            def get_form(self, request, obj=None, **kwargs):
+                kwargs['exclude'] = ['bio']
+                return super(BandAdmin, self).get_form(request, obj, **kwargs)
+
+        ma = BandAdmin(Band, self.site)
+        self.assertEqual(list(ma.get_form(request).base_fields),
+            ['name', 'sign_date'])
+
+    def test_formset_exclude_kwarg_override(self):
+        """
+        Ensure that the `exclude` kwarg passed to `InlineModelAdmin.get_formset()`
+        overrides all other declarations. Refs #8999.
+        """
+
+        class AdminConcertForm(forms.ModelForm):
+
+            class Meta:
+                model = Concert
+                exclude = ['day']
+
+        class ConcertInline(TabularInline):
+            exclude = ['transport']
+            form = AdminConcertForm
+            fk_name = 'main_band'
+            model = Concert
+
+            def get_formset(self, request, obj=None, **kwargs):
+                kwargs['exclude'] = ['opening_band']
+                return super(ConcertInline, self).get_formset(request, obj, **kwargs)
+
+        class BandAdmin(ModelAdmin):
+            inlines = [
+                ConcertInline
+            ]
+
+        ma = BandAdmin(Band, self.site)
+        self.assertEqual(
+            list(list(ma.get_formsets(request))[0]().forms[0].fields),
+            ['main_band', 'day', 'transport', 'id', 'DELETE'])
 
     def test_queryset_override(self):
         # If we need to override the queryset of a ModelChoiceField in our custom form
@@ -151,7 +311,7 @@ class ModelAdminTests(TestCase):
         ma = ConcertAdmin(Concert, self.site)
         form = ma.get_form(request)()
 
-        self.assertEqual(str(form["main_band"]),
+        self.assertHTMLEqual(str(form["main_band"]),
             '<select name="main_band" id="id_main_band">\n'
             '<option value="" selected="selected">---------</option>\n'
             '<option value="%d">The Beatles</option>\n'
@@ -172,11 +332,44 @@ class ModelAdminTests(TestCase):
         ma = ConcertAdmin(Concert, self.site)
         form = ma.get_form(request)()
 
-        self.assertEqual(str(form["main_band"]),
+        self.assertHTMLEqual(str(form["main_band"]),
             '<select name="main_band" id="id_main_band">\n'
             '<option value="" selected="selected">---------</option>\n'
             '<option value="%d">The Doors</option>\n'
             '</select>' % self.band.id)
+
+    def test_regression_for_ticket_15820(self):
+        """
+        Ensure that `obj` is passed from `InlineModelAdmin.get_fieldsets()` to
+        `InlineModelAdmin.get_formset()`.
+        """
+        class CustomConcertForm(forms.ModelForm):
+
+            class Meta:
+                model = Concert
+                fields = ['day']
+
+        class ConcertInline(TabularInline):
+            model = Concert
+            fk_name = 'main_band'
+
+            def get_formset(self, request, obj=None, **kwargs):
+                if obj:
+                    kwargs['form'] = CustomConcertForm
+                return super(ConcertInline, self).get_formset(request, obj, **kwargs)
+
+        class BandAdmin(ModelAdmin):
+            inlines = [
+                ConcertInline
+            ]
+
+        concert = Concert.objects.create(main_band=self.band, opening_band=self.band, day=1)
+        ma = BandAdmin(Band, self.site)
+        inline_instances = ma.get_inline_instances(request)
+        fieldsets = list(inline_instances[0].get_fieldsets(request))
+        self.assertEqual(fieldsets[0][1]['fields'], ['main_band', 'opening_band', 'day', 'transport'])
+        fieldsets = list(inline_instances[0].get_fieldsets(request, inline_instances[0].model))
+        self.assertEqual(fieldsets[0][1]['fields'], ['day'])
 
     # radio_fields behavior ###########################################
 
@@ -194,13 +387,13 @@ class ModelAdminTests(TestCase):
             Select)
         self.assertEqual(
             list(cmafa.base_fields['main_band'].widget.choices),
-            [(u'', u'---------'), (self.band.id, u'The Doors')])
+            [('', '---------'), (self.band.id, 'The Doors')])
 
         self.assertEqual(
             type(cmafa.base_fields['opening_band'].widget.widget), Select)
         self.assertEqual(
             list(cmafa.base_fields['opening_band'].widget.choices),
-            [(u'', u'---------'), (self.band.id, u'The Doors')])
+            [('', '---------'), (self.band.id, 'The Doors')])
 
         self.assertEqual(type(cmafa.base_fields['day'].widget), Select)
         self.assertEqual(list(cmafa.base_fields['day'].widget.choices),
@@ -234,7 +427,7 @@ class ModelAdminTests(TestCase):
         self.assertEqual(cmafa.base_fields['main_band'].widget.attrs,
             {'class': 'radiolist inline'})
         self.assertEqual(list(cmafa.base_fields['main_band'].widget.choices),
-            [(self.band.id, u'The Doors')])
+            [(self.band.id, 'The Doors')])
 
         self.assertEqual(
             type(cmafa.base_fields['opening_band'].widget.widget),
@@ -243,7 +436,7 @@ class ModelAdminTests(TestCase):
             {'class': 'radiolist'})
         self.assertEqual(
             list(cmafa.base_fields['opening_band'].widget.choices),
-            [(u'', u'None'), (self.band.id, u'The Doors')])
+            [('', 'None'), (self.band.id, 'The Doors')])
 
         self.assertEqual(type(cmafa.base_fields['day'].widget),
             AdminRadioSelect)
@@ -257,7 +450,7 @@ class ModelAdminTests(TestCase):
         self.assertEqual(cmafa.base_fields['transport'].widget.attrs,
             {'class': 'radiolist inline'})
         self.assertEqual(list(cmafa.base_fields['transport'].widget.choices),
-            [('', u'None'), (1, 'Plane'), (2, 'Train'), (3, 'Bus')])
+            [('', 'None'), (1, 'Plane'), (2, 'Train'), (3, 'Bus')])
 
         class AdminConcertForm(forms.ModelForm):
             class Meta:
@@ -268,7 +461,7 @@ class ModelAdminTests(TestCase):
             form = AdminConcertForm
 
         ma = ConcertAdmin(Concert, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['main_band', 'opening_band', 'day'])
 
         class AdminConcertForm(forms.ModelForm):
@@ -282,7 +475,7 @@ class ModelAdminTests(TestCase):
             form = AdminConcertForm
 
         ma = ConcertAdmin(Concert, self.site)
-        self.assertEqual(ma.get_form(request).base_fields.keys(),
+        self.assertEqual(list(ma.get_form(request).base_fields),
             ['extra', 'transport'])
 
         class ConcertInline(TabularInline):
@@ -298,7 +491,7 @@ class ModelAdminTests(TestCase):
 
         ma = BandAdmin(Band, self.site)
         self.assertEqual(
-            list(ma.get_formsets(request))[0]().forms[0].fields.keys(),
+            list(list(ma.get_formsets(request))[0]().forms[0].fields),
             ['extra', 'transport', 'id', 'DELETE', 'main_band'])
 
 
@@ -313,7 +506,7 @@ class ValidationTests(unittest.TestCase):
 
             site = AdminSite()
 
-            self.assertRaisesRegexp(
+            six.assertRaisesRegex(self,
                 ImproperlyConfigured,
                 "'ValidationTestModelAdmin.raw_id_fields' must be a list or tuple.",
                 site.register,
@@ -331,7 +524,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             raw_id_fields = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.raw_id_fields' must be a list or tuple.",
             validate,
@@ -342,9 +535,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             raw_id_fields = ('non_existent_field',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.raw_id_fields' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.raw_id_fields' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -353,7 +546,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             raw_id_fields = ('name',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.raw_id_fields\[0\]', 'name' must be either a ForeignKey or ManyToManyField.",
             validate,
@@ -371,7 +564,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.fieldsets' must be a list or tuple.",
             validate,
@@ -382,7 +575,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = ({},)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.fieldsets\[0\]' must be a list or tuple.",
             validate,
@@ -393,7 +586,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = ((),)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.fieldsets\[0\]' does not have exactly two elements.",
             validate,
@@ -404,7 +597,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = (("General", ()),)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.fieldsets\[0\]\[1\]' must be a dictionary.",
             validate,
@@ -415,7 +608,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = (("General", {}),)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'fields' key is required in ValidationTestModelAdmin.fieldsets\[0\]\[1\] field options dict.",
             validate,
@@ -426,7 +619,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = (("General", {"fields": ("non_existent_field",)}),)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.fieldsets\[0\]\[1\]\['fields'\]' refers to field 'non_existent_field' that is missing from the form.",
             validate,
@@ -443,7 +636,7 @@ class ValidationTests(unittest.TestCase):
             fieldsets = (("General", {"fields": ("name",)}),)
             fields = ["name",]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "Both fieldsets and fields are specified in ValidationTestModelAdmin.",
             validate,
@@ -454,7 +647,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fieldsets = [(None, {'fields': ['name', 'name']})]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "There are duplicate field\(s\) in ValidationTestModelAdmin.fieldsets",
             validate,
@@ -465,7 +658,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             fields = ["name", "name"]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "There are duplicate field\(s\) in ValidationTestModelAdmin.fields",
             validate,
@@ -481,7 +674,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             form = FakeForm
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "ValidationTestModelAdmin.form does not inherit from BaseModelForm.",
             validate,
@@ -499,7 +692,7 @@ class ValidationTests(unittest.TestCase):
                 }),
             )
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'BandAdmin.fieldsets\[0\]\[1\]\['fields'\]' refers to field 'non_existent_field' that is missing from the form.",
             validate,
@@ -529,7 +722,7 @@ class ValidationTests(unittest.TestCase):
                 }),
             )
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'BandAdmin.fieldsets\[0]\[1\]\['fields'\]' refers to field 'non_existent_field' that is missing from the form.",
             validate,
@@ -559,7 +752,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             filter_vertical = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.filter_vertical' must be a list or tuple.",
             validate,
@@ -570,9 +763,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             filter_vertical = ("non_existent_field",)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.filter_vertical' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.filter_vertical' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -581,7 +774,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             filter_vertical = ("name",)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.filter_vertical\[0\]' must be a ManyToManyField.",
             validate,
@@ -599,7 +792,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             filter_horizontal = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.filter_horizontal' must be a list or tuple.",
             validate,
@@ -610,9 +803,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             filter_horizontal = ("non_existent_field",)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.filter_horizontal' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.filter_horizontal' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -621,7 +814,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             filter_horizontal = ("name",)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.filter_horizontal\[0\]' must be a ManyToManyField.",
             validate,
@@ -639,7 +832,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             radio_fields = ()
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.radio_fields' must be a dictionary.",
             validate,
@@ -650,9 +843,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             radio_fields = {"non_existent_field": None}
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.radio_fields' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.radio_fields' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -661,7 +854,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             radio_fields = {"name": None}
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.radio_fields\['name'\]' is neither an instance of ForeignKey nor does have choices set.",
             validate,
@@ -672,7 +865,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             radio_fields = {"state": None}
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.radio_fields\['state'\]' is neither admin.HORIZONTAL nor admin.VERTICAL.",
             validate,
@@ -690,7 +883,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             prepopulated_fields = ()
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.prepopulated_fields' must be a dictionary.",
             validate,
@@ -701,9 +894,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             prepopulated_fields = {"non_existent_field": None}
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.prepopulated_fields' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.prepopulated_fields' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -712,9 +905,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             prepopulated_fields = {"slug": ("non_existent_field",)}
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.prepopulated_fields\['slug'\]\[0\]' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.prepopulated_fields\['slug'\]\[0\]' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -723,7 +916,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             prepopulated_fields = {"users": ("name",)}
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.prepopulated_fields\['users'\]' is either a DateTimeField, ForeignKey or ManyToManyField. This isn't allowed.",
             validate,
@@ -741,7 +934,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_display = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_display' must be a list or tuple.",
             validate,
@@ -752,9 +945,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_display = ('non_existent_field',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "ValidationTestModelAdmin.list_display\[0\], 'non_existent_field' is not a callable or an attribute of 'ValidationTestModelAdmin' or found in the model 'ValidationTestModel'.",
+            str_prefix("ValidationTestModelAdmin.list_display\[0\], %(_)s'non_existent_field' is not a callable or an attribute of 'ValidationTestModelAdmin' or found in the model 'ValidationTestModel'."),
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -763,7 +956,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_display = ('users',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_display\[0\]', 'users' is a ManyToManyField which is not supported.",
             validate,
@@ -786,7 +979,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_display_links = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_display_links' must be a list or tuple.",
             validate,
@@ -797,7 +990,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_display_links = ('non_existent_field',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_display_links\[0\]' refers to 'non_existent_field' which is not defined in 'list_display'.",
             validate,
@@ -808,7 +1001,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_display_links = ('name',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_display_links\[0\]' refers to 'name' which is not defined in 'list_display'.",
             validate,
@@ -832,7 +1025,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_filter = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_filter' must be a list or tuple.",
             validate,
@@ -843,7 +1036,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_filter = ('non_existent_field',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_filter\[0\]' refers to 'non_existent_field' which does not refer to a Field.",
             validate,
@@ -851,8 +1044,65 @@ class ValidationTests(unittest.TestCase):
             ValidationTestModel,
         )
 
+        class RandomClass(object):
+            pass
+
         class ValidationTestModelAdmin(ModelAdmin):
-            list_filter = ('is_active',)
+            list_filter = (RandomClass,)
+
+        six.assertRaisesRegex(self,
+            ImproperlyConfigured,
+            "'ValidationTestModelAdmin.list_filter\[0\]' is 'RandomClass' which is not a descendant of ListFilter.",
+            validate,
+            ValidationTestModelAdmin,
+            ValidationTestModel,
+        )
+
+        class ValidationTestModelAdmin(ModelAdmin):
+            list_filter = (('is_active', RandomClass),)
+
+        six.assertRaisesRegex(self,
+            ImproperlyConfigured,
+            "'ValidationTestModelAdmin.list_filter\[0\]\[1\]' is 'RandomClass' which is not of type FieldListFilter.",
+            validate,
+            ValidationTestModelAdmin,
+            ValidationTestModel,
+        )
+
+        class AwesomeFilter(SimpleListFilter):
+            def get_title(self):
+                return 'awesomeness'
+            def get_choices(self, request):
+                return (('bit', 'A bit awesome'), ('very', 'Very awesome'), )
+            def get_query_set(self, cl, qs):
+                return qs
+
+        class ValidationTestModelAdmin(ModelAdmin):
+            list_filter = (('is_active', AwesomeFilter),)
+
+        six.assertRaisesRegex(self,
+            ImproperlyConfigured,
+            "'ValidationTestModelAdmin.list_filter\[0\]\[1\]' is 'AwesomeFilter' which is not of type FieldListFilter.",
+            validate,
+            ValidationTestModelAdmin,
+            ValidationTestModel,
+        )
+
+        class ValidationTestModelAdmin(ModelAdmin):
+            list_filter = (BooleanFieldListFilter,)
+
+        six.assertRaisesRegex(self,
+            ImproperlyConfigured,
+            "'ValidationTestModelAdmin.list_filter\[0\]' is 'BooleanFieldListFilter' which is of type FieldListFilter but is not associated with a field name.",
+            validate,
+            ValidationTestModelAdmin,
+            ValidationTestModel,
+        )
+
+        # Valid declarations below -----------
+
+        class ValidationTestModelAdmin(ModelAdmin):
+            list_filter = ('is_active', AwesomeFilter, ('is_active', BooleanFieldListFilter), 'no')
 
         validate(ValidationTestModelAdmin, ValidationTestModel)
 
@@ -861,7 +1111,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_per_page = 'hello'
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_per_page' should be a integer.",
             validate,
@@ -874,12 +1124,30 @@ class ValidationTests(unittest.TestCase):
 
         validate(ValidationTestModelAdmin, ValidationTestModel)
 
+    def test_max_show_all_allowed_validation(self):
+
+        class ValidationTestModelAdmin(ModelAdmin):
+            list_max_show_all = 'hello'
+
+        six.assertRaisesRegex(self,
+            ImproperlyConfigured,
+            "'ValidationTestModelAdmin.list_max_show_all' should be an integer.",
+            validate,
+            ValidationTestModelAdmin,
+            ValidationTestModel,
+        )
+
+        class ValidationTestModelAdmin(ModelAdmin):
+            list_max_show_all = 200
+
+        validate(ValidationTestModelAdmin, ValidationTestModel)
+
     def test_search_fields_validation(self):
 
         class ValidationTestModelAdmin(ModelAdmin):
             search_fields = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.search_fields' must be a list or tuple.",
             validate,
@@ -892,9 +1160,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             date_hierarchy = 'non_existent_field'
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.date_hierarchy' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.date_hierarchy' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -903,7 +1171,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             date_hierarchy = 'name'
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.date_hierarchy is neither an instance of DateField nor DateTimeField.",
             validate,
@@ -921,7 +1189,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             ordering = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.ordering' must be a list or tuple.",
             validate,
@@ -932,9 +1200,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             ordering = ('non_existent_field',)
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestModelAdmin.ordering\[0\]' refers to field 'non_existent_field' that is missing from model 'ValidationTestModel'.",
+            "'ValidationTestModelAdmin.ordering\[0\]' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -943,7 +1211,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             ordering = ('?', 'name')
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.ordering' has the random ordering marker '\?', but contains other fields as well. Please either remove '\?' or the other fields.",
             validate,
@@ -971,7 +1239,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             list_select_related = 1
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.list_select_related' should be a boolean.",
             validate,
@@ -989,7 +1257,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             save_as = 1
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.save_as' should be a boolean.",
             validate,
@@ -1007,7 +1275,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             save_on_top = 1
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.save_on_top' should be a boolean.",
             validate,
@@ -1025,7 +1293,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = 10
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.inlines' must be a list or tuple.",
             validate,
@@ -1039,7 +1307,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.inlines\[0\]' does not inherit from BaseModelAdmin.",
             validate,
@@ -1053,7 +1321,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'model' is a required attribute of 'ValidationTestModelAdmin.inlines\[0\]'.",
             validate,
@@ -1070,7 +1338,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestModelAdmin.inlines\[0\].model' does not inherit from models.Model.",
             validate,
@@ -1095,7 +1363,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestInline.fields' must be a list or tuple.",
             validate,
@@ -1110,7 +1378,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestInline.fields' refers to field 'non_existent_field' that is missing from the form.",
             validate,
@@ -1127,9 +1395,9 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
-            "'ValidationTestInline.fk_name' refers to field 'non_existent_field' that is missing from model 'ValidationTestInlineModel'.",
+            "'ValidationTestInline.fk_name' refers to field 'non_existent_field' that is missing from model 'modeladmin.ValidationTestInlineModel'.",
             validate,
             ValidationTestModelAdmin,
             ValidationTestModel,
@@ -1153,7 +1421,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestInline.extra' should be a integer.",
             validate,
@@ -1179,7 +1447,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestInline.max_num' should be an integer or None \(default\).",
             validate,
@@ -1208,7 +1476,7 @@ class ValidationTests(unittest.TestCase):
         class ValidationTestModelAdmin(ModelAdmin):
             inlines = [ValidationTestInline]
 
-        self.assertRaisesRegexp(
+        six.assertRaisesRegex(self,
             ImproperlyConfigured,
             "'ValidationTestInline.formset' does not inherit from BaseModelFormSet.",
             validate,

@@ -1,13 +1,16 @@
-from django.test import TestCase
 from django.contrib.auth.models import User
+from django.test import TestCase
+from django.test.utils import override_settings
 
+
+@override_settings(PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',))
 class SpecialHeadersTest(TestCase):
     fixtures = ['data.xml']
+    urls = 'regressiontests.special_headers.urls'
 
     def test_xheaders(self):
         user = User.objects.get(username='super')
         response = self.client.get('/special_headers/article/1/')
-        # import pdb; pdb.set_trace()
         self.assertFalse('X-Object-Type' in response)
         self.client.login(username='super', password='secret')
         response = self.client.get('/special_headers/article/1/')

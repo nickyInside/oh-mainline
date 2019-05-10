@@ -29,6 +29,9 @@ import django.conf
 import django.core.cache
 
 
+logger = logging.getLogger(__name__)
+
+
 def do_nothing_because_this_functionality_moved_to_twisted(*args):
     return None  # This is moved to Twisted now.
 
@@ -56,11 +59,11 @@ source2result_handler = {
 class GarbageCollectForwarders:
 
     def run(self, **kwargs):
-        logging.info("Started garbage collecting profile email forwarders")
+        logger.info("Started garbage collecting profile email forwarders")
         deleted_any = mysite.profile.models.Forwarder.garbage_collect()
         if deleted_any:
-            # Well, in that case, we should purge the staticgenerator-generated
-            # cache of the people pages.
+            # Well, in that case, we should purge the
+            # staticgenerator-generated cache of the people pages.
             clear_people_page_cache()
         return deleted_any
 
@@ -79,82 +82,25 @@ class RegeneratePostfixAliasesForForwarder:
         fd = open(django.conf.settings.POSTFIX_FORWARDER_TABLE_PATH, 'w')
         fd.write('\n'.join(lines))
         fd.close()
-        # Update the Postfix forwarder database. Note that we do not need
-        # to ask Postfix to reload. Yay!
-        # FIXME stop using os.system()
-        if mysite.base.depends.postmap_available():
-            os.system('/usr/sbin/postmap /etc/postfix/virtual_alias_maps')
-
+        
 
 class FetchPersonDataFromOhloh:
     name = "profile.FetchPersonDataFromOhloh"
 
-    def run(self, dia_id, **kwargs):
-        dia = mysite.profile.models.DataImportAttempt.objects.get(id=dia_id)
-        try:
-            logging.info("Starting job for <%s>" % dia)
-            if dia.completed:
-                logging.info("Bailing out job for <%s>" % dia)
-                return
-            results = source2actual_action[dia.source](dia)
-            source2result_handler[dia.source](dia.id, results)
-            logging.info("Results: %s" % repr(results))
-
-        except Exception, e:
-            # if the task is in debugging mode, bubble-up the exception
-            if getattr(self, 'debugging', None):
-                raise
-            logging.error("Traceback: ")
-            logging.error(traceback.format_exc())
-
-            # else let the exception be logged but not bubble up
-            dia.completed = True
-            dia.failed = True
-            dia.save()
-            if hasattr(e, 'code'):
-                code = str(e.code)
-            else:
-                code = 'UNKNOWN'
-            if hasattr(e, 'geturl'):
-                url = str(e.geturl())
-            else:
-                raise
-            logging.error('Dying: ' + code + ' getting ' + url)
-            raise ValueError, {'code': code, 'url': url}
-
-
-def fill_recommended_bugs_cache():
-    logging.info("Filling recommended bugs cache for all people.")
-    for person in mysite.profile.models.Person.objects.all():
-        fill_one_person_recommend_bugs_cache(person_id=person.id)
-    logging.info("Finished filling recommended bugs cache for all people.")
-
-
-def fill_one_person_recommend_bugs_cache(person_id):
-    p = mysite.profile.models.Person.objects.get(id=person_id)
-    logging.info("Recommending bugs for %s" % p)
-    suggested_searches = p.get_recommended_search_terms()  # expensive?
-    # cache fill prep...
-    recommender = mysite.profile.view_helpers.RecommendBugs(
-        suggested_searches, n=5)
-    recommender.recommend()  # cache fill do it.
-
-
-def sync_bug_timestamp_from_model_then_fill_recommended_bugs_cache():
-    logging.info("Syncing bug timestamp...")
-    # Find the highest bug object modified date
-    from django.db.models import Max
-    highest_bug_mtime = mysite.search.models.Bug.all_bugs.all().aggregate(
-        Max('modified_date')).values()[0]
-    timestamp = mysite.base.models.Timestamp.get_timestamp_for_string(
-        str(mysite.search.models.Bug))
-    # if the timestamp is lower, then set the timestamp to that value
-    if highest_bug_mtime.timetuple() > timestamp.timetuple():
-        mysite.base.models.Timestamp.update_timestamp_for_string(
-            str(mysite.search.models.Bug))
-        logging.info("Whee! Bumped the timestamp. Guess I'll fill the cache.")
-        fill_recommended_bugs_cache()
-    logging.info("Done syncing bug timestamp.")
+    def run(self, **kwargs):
+        # if the task is in debugging mode, bubble-up the exception
+        if getattr(self, 'debugging', None):
+            raise
+        if hasattr(e, 'code'):
+            code = str(e.code)
+        else:
+            code = 'UNKNOWN'
+        if hasattr(e, 'geturl'):
+            url = str(e.geturl())
+        else:
+            raise
+        logger.error('Dying: ' + code + ' getting ' + url)
+        raise ValueError, {'code': code, 'url': url}
 
 
 def clear_people_page_cache(*args, **kwargs):

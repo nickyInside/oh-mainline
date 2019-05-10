@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 import re
 import types
 from datetime import datetime, timedelta
 
 from django.core.exceptions import ValidationError
 from django.core.validators import *
+from django.test.utils import str_prefix
 from django.utils.unittest import TestCase
 
 
@@ -22,12 +25,24 @@ TEST_DATA = (
 
     (validate_email, 'email@here.com', None),
     (validate_email, 'weirder-email@here.and.there.com', None),
+    (validate_email, 'email@[127.0.0.1]', None),
+    (validate_email, 'example@valid-----hyphens.com', None),
+    (validate_email, 'example@valid-with-hyphens.com', None),
+    (validate_email, 'test@domain.with.idn.tld.उदाहरण.परीक्षा', None),
 
     (validate_email, None, ValidationError),
     (validate_email, '', ValidationError),
     (validate_email, 'abc', ValidationError),
+    (validate_email, 'abc@', ValidationError),
+    (validate_email, 'abc@bar', ValidationError),
     (validate_email, 'a @x.cz', ValidationError),
+    (validate_email, 'abc@.com', ValidationError),
     (validate_email, 'something@@somewhere.com', ValidationError),
+    (validate_email, 'email@127.0.0.1', ValidationError),
+    (validate_email, 'example@invalid-.com', ValidationError),
+    (validate_email, 'example@-invalid.com', ValidationError),
+    (validate_email, 'example@inv-.alid-.com', ValidationError),
+    (validate_email, 'example@inv-.-alid.com', ValidationError),
     # Quoted-string format (CR not allowed)
     (validate_email, '"\\\011"@here.com', None),
     (validate_email, '"\\\012"@here.com', ValidationError),
@@ -52,6 +67,31 @@ TEST_DATA = (
     (validate_ipv4_address, '25.1.1.', ValidationError),
     (validate_ipv4_address, '25,1,1,1', ValidationError),
     (validate_ipv4_address, '25.1 .1.1', ValidationError),
+
+    # validate_ipv6_address uses django.utils.ipv6, which
+    # is tested in much greater detail in it's own testcase
+    (validate_ipv6_address, 'fe80::1', None),
+    (validate_ipv6_address, '::1', None),
+    (validate_ipv6_address, '1:2:3:4:5:6:7:8', None),
+
+    (validate_ipv6_address, '1:2', ValidationError),
+    (validate_ipv6_address, '::zzz', ValidationError),
+    (validate_ipv6_address, '12345::', ValidationError),
+
+    (validate_ipv46_address, '1.1.1.1', None),
+    (validate_ipv46_address, '255.0.0.0', None),
+    (validate_ipv46_address, '0.0.0.0', None),
+    (validate_ipv46_address, 'fe80::1', None),
+    (validate_ipv46_address, '::1', None),
+    (validate_ipv46_address, '1:2:3:4:5:6:7:8', None),
+
+    (validate_ipv46_address, '256.1.1.1', ValidationError),
+    (validate_ipv46_address, '25.1.1.', ValidationError),
+    (validate_ipv46_address, '25,1,1,1', ValidationError),
+    (validate_ipv46_address, '25.1 .1.1', ValidationError),
+    (validate_ipv46_address, '1:2', ValidationError),
+    (validate_ipv46_address, '::zzz', ValidationError),
+    (validate_ipv46_address, '12345::', ValidationError),
 
     (validate_comma_separated_integer_list, '1', None),
     (validate_comma_separated_integer_list, '1,2,3', None),
@@ -115,6 +155,11 @@ TEST_DATA = (
     (BaseValidator(True), True, None),
     (BaseValidator(True), False, ValidationError),
 
+    (RegexValidator(), '', None),
+    (RegexValidator(), 'x1x2', None),
+    (RegexValidator('[0-9]+'), 'xxxxxx', ValidationError),
+    (RegexValidator('[0-9]+'), '1234', None),
+    (RegexValidator(re.compile('[0-9]+')), '1234', None),
     (RegexValidator('.*'), '', None),
     (RegexValidator(re.compile('.*')), '', None),
     (RegexValidator('.*'), 'xxxxx', None),
@@ -127,11 +172,23 @@ def create_simple_test_method(validator, expected, value, num):
     if expected is not None and issubclass(expected, Exception):
         test_mask = 'test_%s_raises_error_%d'
         def test_func(self):
-            self.assertRaises(expected, validator, value)
+            # assertRaises not used, so as to be able to produce an error message
+            # containing the tested value
+            try:
+                validator(value)
+            except expected:
+                pass
+            else:
+                self.fail("%s not raised when validating '%s'" % (
+                    expected.__name__, value))
     else:
         test_mask = 'test_%s_%d'
         def test_func(self):
-            self.assertEqual(expected, validator(value))
+            try:
+                self.assertEqual(expected, validator(value))
+            except ValidationError as e:
+                self.fail("Validation of '%s' failed. Error message was: %s" % (
+                    value, str(e)))
     if isinstance(validator, types.FunctionType):
         val_name = validator.__name__
     else:
@@ -144,18 +201,18 @@ def create_simple_test_method(validator, expected, value, num):
 class TestSimpleValidators(TestCase):
     def test_single_message(self):
         v = ValidationError('Not Valid')
-        self.assertEqual(str(v), "[u'Not Valid']")
-        self.assertEqual(repr(v), "ValidationError([u'Not Valid'])")
+        self.assertEqual(str(v), str_prefix("[%(_)s'Not Valid']"))
+        self.assertEqual(repr(v), str_prefix("ValidationError([%(_)s'Not Valid'])"))
 
     def test_message_list(self):
         v = ValidationError(['First Problem', 'Second Problem'])
-        self.assertEqual(str(v), "[u'First Problem', u'Second Problem']")
-        self.assertEqual(repr(v), "ValidationError([u'First Problem', u'Second Problem'])")
+        self.assertEqual(str(v), str_prefix("[%(_)s'First Problem', %(_)s'Second Problem']"))
+        self.assertEqual(repr(v), str_prefix("ValidationError([%(_)s'First Problem', %(_)s'Second Problem'])"))
 
     def test_message_dict(self):
         v = ValidationError({'first': 'First Problem'})
-        self.assertEqual(str(v), "{'first': 'First Problem'}")
-        self.assertEqual(repr(v), "ValidationError({'first': 'First Problem'})")
+        self.assertEqual(str(v), str_prefix("{%(_)s'first': %(_)s'First Problem'}"))
+        self.assertEqual(repr(v), str_prefix("ValidationError({%(_)s'first': %(_)s'First Problem'})"))
 
 test_counter = 0
 for validator, value, expected in TEST_DATA:

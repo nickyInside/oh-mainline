@@ -28,7 +28,6 @@ Log in
 {{ block.super }}
 {% comment %}CSSTODO - move this to a style sheet{% endcomment %}
 form { width: 350px; }
-.login-links li { list-style: square; float: left; width: 95%; margin-top: 5px; margin-left: 15px; }
 .unsaved-data p{ margin-left: 3; padding-left: 0; list-style: square; float: left; width: 95%; margin-top: 5px; }
 .unsaved-data .the-data { float: left; color: #555;}
 .unsaved-data .the-data .label { font-style: normal;}
@@ -44,7 +43,7 @@ form { width: 350px; }
 
 <div id='login' class='module'>
     <div class='module-head'>
-        <h3>Log in with an account you already own</h3>
+        <h3>Log in with OpenID</h3>
     </div>
     <div class='module-body'>
 
@@ -107,19 +106,14 @@ form { width: 350px; }
             </ul>
             {% endif %}
 
-            <ul class='login-links' style='float: right; width: 300px; padding: 16px; padding-bottom: 16px; border-radius: 8px; -moz-border-radius: 8px; background-color: #f4f4f4;'>
-                <h4 style='width: 95%;'>Relatedly</h4>
+            <ul class='login-links'>
+                <h4 style='width: 95%;'>Related</h4>
 
-                <li><a style='font-weight: bold;'
-                    href='/blog/2009/why-we-support-openid'>
-                    What is OpenID?
-                </a></li>
-
-                <li><a href='{% url oh_login_pwd %}?next={{ next|urlencode }}'>
+                <li><a href='{% url "oh_login_pwd" %}?next={{ next|urlencode }}'>
                     Log in with a password
                 </a></li>
 
-                <li><a href='{% url mysite.account.views.signup %}?next={{ next|urlencode }}'>
+                <li><a href='{% url "mysite.account.views.signup" %}?next={{ next|urlencode }}'>
                     Sign up without OpenID
                 </a></li>
             </ul>

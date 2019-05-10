@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from django.conf.urls.defaults import patterns, url, include, handler404
+from django.conf.urls import patterns, url, include, handler404
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponsePermanentRedirect
 from django.shortcuts import redirect
 
@@ -33,8 +33,10 @@ import mysite.account.forms
 import django_authopenid.views
 
 # used for the robots.txt redirection
-from django.views.generic.simple import direct_to_template
+from django.views.generic import RedirectView, TemplateView
+# from django.views.generic.simple import direct_to_template
 
+from httpproxy.views import HttpProxy
 from voting.views import vote_on_object
 
 import mysite.account.views
@@ -44,12 +46,8 @@ import mysite.profile.api
 import mysite.missions.svn.views
 import mysite.missions.setup.views
 
-from mysite.base.feeds import RecommendedBugsFeed, RecentActivityFeed
+from mysite.base.feeds import RecentActivityFeed
 
-feeds = {
-    'recbugs': RecommendedBugsFeed,
-    'activity': RecentActivityFeed,
-}
 
 urlpatterns = patterns('',
                        # Okay, sometimes people link /, or /) because of bad linkification
@@ -57,7 +55,30 @@ urlpatterns = patterns('',
                        (r'^,$', lambda x: HttpResponsePermanentRedirect('/')),
                        (r'^\)$', lambda x: HttpResponsePermanentRedirect('/')),
 
-                       (r'^\+meta/', 'mysite.base.views.meta'),
+                       (r'^blog/(?P<url>.*)',
+                        HttpProxy.as_view(base_url='http://blog.openhatch.org')),
+
+                       (r'^bugs/?$',
+                        lambda x: HttpResponsePermanentRedirect(
+                            'https://github.com/openhatch/oh-mainline/issues/')),
+                       (r'^bugs/(?P<number>\d+)$',
+                        lambda x, number: HttpResponsePermanentRedirect(
+                            'https://github.com/openhatch/oh-mainline/issues/{}'.format(int(number) + 315))),
+
+                       url(r'^forum(?P<path>($|/.*))',
+                        RedirectView.as_view(url='http://forum.openhatch.org%(path)s')),
+
+                       (r'^wiki$', lambda x: redirect('/wiki/')),
+                       (r'^w(iki)?(?P<path>($|/.*))',
+                        RedirectView.as_view(url='http://wiki.openhatch.org%(path)s')),
+
+                       (r'^contact/?$', lambda x: redirect('/wiki/Contact')),
+                       (r'^policies-etc/?$', lambda x: redirect('/wiki/Privacy_policy')),
+                       (r'^source-code-etc/?$', lambda x: redirect('/wiki/Category:Hacking_OpenHatch')),
+                       (r'^colophon/?$', lambda x: redirect('/wiki/About_OpenHatch')),
+                       (r'^about/?$', lambda x: redirect('/wiki/About_OpenHatch')),
+                       (r'^/blog/source-code-etc/?$', lambda x: redirect('/wiki/Category:Hacking_Openhatch')),
+                       (r'^/blog/about/?$', lambda x: redirect('/wiki/About_OpenHatch')),
 
                        (r'^\+api/v1/profile/',
                         include(
@@ -82,13 +103,13 @@ urlpatterns = patterns('',
                        (r'^-profile.views.unsubscribe_do',
                         'mysite.profile.views.unsubscribe_do'),
 
-                       (r'^\+projects/suggest_question/',
+                       (r'^\projects/suggest_question/',
                         'mysite.project.views.suggest_question'),
 
                        (r'^\+projedit/(?P<project__name>.+)',
                         'mysite.project.views.edit_project'),
 
-                       (r'^\+projects/suggest_question_do/',
+                       (r'^\projects/suggest_question_do/',
                         'mysite.project.views.suggest_question_do'),
 
                        (r'^\+do/project.views.wanna_help_do',
@@ -100,7 +121,7 @@ urlpatterns = patterns('',
                        (r'^\+do/project.views.unlist_self_from_wanna_help_do',
                         'mysite.project.views.unlist_self_from_wanna_help_do'),
 
-                       (r'^\+projects/create_project_page_do',
+                       (r'^\projects/create_project_page_do',
                         'mysite.project.views.create_project_page_do'),
                        # Generic view to vote on Link objects
                        (r'^\+answer/vote/(?P<object_id>\d+)/(?P<direction>up|down|clear)vote/?$',
@@ -110,8 +131,7 @@ urlpatterns = patterns('',
                                              allow_xmlhttprequest=True)),
 
                        # Feed URL pattern
-                       url(r'^\+feeds/(?P<url>.*)/$', 'django.contrib.syndication.views.feed',
-                           {'feed_dict': feeds}, name='oh_feed_url'),
+                       url(r'^\+feeds/activity/$', RecentActivityFeed()),
 
                        # Mission-related URLs
                        (r'^missions/$',
@@ -125,14 +145,14 @@ urlpatterns = patterns('',
                         'mysite.missions.tar.views.creating'),
                        (r'^missions/tar/hints$',
                         'mysite.missions.tar.views.hints'),
-                       (r'^missions/tar/upload$',
-                        'mysite.missions.tar.views.upload'),
                        (r'^missions/tar/downloadfile/(?P<name>.*)',
                         'mysite.missions.tar.views.file_download'),
                        (r'^missions/tar/ghello-0.4.tar.gz',
                         'mysite.missions.tar.views.download_tarball_for_extract_mission'),
-                       (r'^missions/tar/extractupload',
-                        'mysite.missions.tar.views.extract_mission_upload'),
+                       (r'^missions/tar/extractsuccess',
+                        'mysite.missions.tar.views.extract_mission_success'),
+                       (r'^missions/tar/createsuccess',
+                        'mysite.missions.tar.views.create_mission_success'),
 
                        (r'^missions/diffpatch$',
                         'mysite.missions.diffpatch.views.about'),
@@ -144,6 +164,8 @@ urlpatterns = patterns('',
                         'mysite.missions.diffpatch.views.recursive_diff'),
                        (r'^missions/diffpatch/recursive_patch$',
                         'mysite.missions.diffpatch.views.recursive_patch'),
+                       (r'^missions/diffpatch/hints$',
+                            'mysite.missions.diffpatch.views.hints'),
                        (r'^missions/diffpatch/patchsingle/oven-pancake.txt',
                         'mysite.missions.diffpatch.views.patchsingle_get_original_file'),
                        (r'^missions/diffpatch/patchsingle/add-oven-temp.patch$',
@@ -162,6 +184,23 @@ urlpatterns = patterns('',
                         'mysite.missions.diffpatch.views.patchrecursive_get_patch'),
                        (r'^missions/diffpatch/patchrecursive/submit$',
                         'mysite.missions.diffpatch.views.patchrecursive_submit'),
+
+                       (r'^missions/pipvirtualenv$',
+                        'mysite.missions.pipvirtualenv.views.about'),
+                       (r'^missions/pipvirtualenv/setup$',
+                        'mysite.missions.pipvirtualenv.views.setup_pipvirtualenv'),
+                       (r'^missions/pipvirtualenv/installing_packages$',
+                        'mysite.missions.pipvirtualenv.views.installing_packages'),
+                       (r'^missions/pipvirtualenv/installing_packages/submit$',
+                        'mysite.missions.pipvirtualenv.views.pip_freeze_submit'),
+                       (r'^missions/pipvirtualenv/removing_packages$',
+                        'mysite.missions.pipvirtualenv.views.removing_packages'),
+                       (r'^missions/pipvirtualenv/removing_packages/submit$',
+                        'mysite.missions.pipvirtualenv.views.pip_list_submit'),
+                       (r'^missions/pipvirtualenv/learning_more$',
+                        'mysite.missions.pipvirtualenv.views.learning_more'),
+                       (r'^missions/pipvirtualenv/reference$',
+                        'mysite.missions.pipvirtualenv.views.reference'),
 
                        (r'^missions/svn$', mysite.missions.svn.views.MainPage.as_view(),
                         None, 'svn_main_page'),
@@ -206,10 +245,41 @@ urlpatterns = patterns('',
                         'mysite.missions.git.views.rebase'),
                        (r'^missions/git/rebase/submit$',
                         'mysite.missions.git.views.rebase_submit'),
+                       (r'^missions/git/reference$',
+                        'mysite.missions.git.views.reference'),
 
                        (r'^missions/windows-setup',
                         include(
                             mysite.missions.setup.views.WindowsSetup.urls())),
+
+                       # Shell mission URLs
+                       (r'^missions/shell/about$',
+                        'mysite.missions.shell.views.about'),
+                       (r'^missions/shell/cd$',
+                        'mysite.missions.shell.views.command_cd'),
+                       (r'^missions/shell/cd/submit$',
+                        'mysite.missions.shell.views.command_cd_submit'),
+                       (r'^missions/shell/ls$',
+                        'mysite.missions.shell.views.command_ls'),
+                       (r'^missions/shell/ls/submit$',
+                        'mysite.missions.shell.views.command_ls_submit'),
+                       (r'^missions/shell/create-and-remove$',
+                        'mysite.missions.shell.views.command_mkdir_rm'),
+                       (r'^missions/shell/create-and-remove/submit$',
+                        'mysite.missions.shell.views.command_mkdir_rm_submit'),
+                       (r'^missions/shell/copy-and-move$',
+                        'mysite.missions.shell.views.command_cp_mv'),
+                       (r'^missions/shell/copy-and-move/submit$',
+                        'mysite.missions.shell.views.command_cp_mv_submit'),
+                       (r'^missions/shell/file-and-directory$',
+                        'mysite.missions.shell.views.file_and_directory'),
+                       (r'^missions/shell/more-info$',
+                        'mysite.missions.shell.views.more_info'),
+
+                       (r'^missions/irc$',
+                        'mysite.missions.irc.views.irc_mission'),
+                       (r'^missions/irc/sessioninfo$',
+                        'mysite.missions.irc.views.irc_session_password_submit'),
 
                        # Customs-related URLs
                        (r'^customs/$', 'mysite.customs.views.list_trackers'),
@@ -238,6 +308,16 @@ urlpatterns = patterns('',
                        (r'^customs/delete_url/(?P<tracker_type>\w*)/(?P<tracker_id>\d+)/(?P<tracker_name>.+)/url/(?P<url_id>\d*)/do$',
                         'mysite.customs.views.delete_tracker_url_do'),
 
+                       # Bug set creator URLs
+                       (r'^bugsets/$', 'mysite.bugsets.views.main_index'),
+                       (r'^bugsets/(?P<pk>\d+)-(?P<slug>.*)$',
+                        'mysite.bugsets.views.list_index'),
+                       (r'^bugsets/create$', 'mysite.bugsets.views.create_index'),
+                       (r'^bugsets/edit/(?P<pk>\d+)-(?P<slug>.*)$', 'mysite.bugsets.views.create_index'),
+                       (r'^bugsets/api/$', 'mysite.bugsets.views.api_index'),
+                       # This is a view for robots, do not modify
+                       (r'^inplaceeditform/', include('inplaceeditform.urls')),
+
                        # Invitation-related URLs
                        (r'^invitation/', include('invitation.urls')),
 
@@ -256,6 +336,8 @@ urlpatterns = patterns('',
                        (r'^admin/', include(admin.site.urls)),
                        (r'^static/(?P<path>.*)$', 'django.views.static.serve',
                         {'document_root': settings.MEDIA_ROOT}),
+                       (r'^statik/(?P<path>.*)$', 'django.views.static.serve',
+                        {'document_root': settings.STATIC_ROOT}),
 
                        (r'^people/$',
                         'mysite.profile.views.people'),
@@ -357,12 +439,6 @@ urlpatterns = patterns('',
                        (r'^account/settings/location/do$',
                         'mysite.account.views.set_location_do'),
 
-                       (r'^account/settings/location/confirm_suggestion/do$',
-                        'mysite.account.views.confirm_location_suggestion_do'),
-
-                       (r'^account/settings/location/dont_guess_location/do$',
-                        'mysite.account.views.dont_guess_location_do'),
-
                        (r'^account/settings/invite_someone/$',
                         'mysite.account.views.invite_someone'),
 
@@ -396,8 +472,6 @@ urlpatterns = patterns('',
                        # Get a list of suggestions for the search input,
                        # formatted the way that the jQuery autocomplete plugin
                        # wants it.
-                       (r'^search/get_suggestions$',
-                        'mysite.search.views.request_jquery_autocompletion_suggestions'),
 
                        (r'^profile/views/gimme_json_for_portfolio$',
                         'mysite.profile.views.gimme_json_for_portfolio'),
@@ -408,32 +482,20 @@ urlpatterns = patterns('',
                        (r'^profile/views/delete_citation_do$',
                         'mysite.profile.views.delete_citation_do'),
 
+                       (r'^people/portfolio/import/$',
+                        'mysite.profile.views.importer'),
+
+                      (r'^\+portfolio/editor/$',
+                        'mysite.profile.views.portfolio_editor'),
+
                        (r'^profile/views/save_portfolio_entry_do$',
                         'mysite.profile.views.save_portfolio_entry_do'),
 
                        (r'^profile/views/delete_portfolio_entry_do$',
                         'mysite.profile.views.delete_portfolio_entry_do'),
 
-                       (r'^\+profile/bug_recommendation_list_as_template_fragment$',
-                        'mysite.profile.views.bug_recommendation_list_as_template_fragment'),
-
-                       (r'^people/portfolio/import/$',
-                        'mysite.profile.views.importer'),
-
-                       (r'^\+portfolio/editor/$',
-                        'mysite.profile.views.portfolio_editor'),
-
-                       (r'^\+portfolio/editor/test$',
-                        'mysite.profile.views.portfolio_editor_test'),
-
                        (r'^profile/views/edit_info$',
                         'mysite.profile.views.edit_info'),
-
-                       (r'^profile/views/prepare_data_import_attempts_do$',
-                        'mysite.profile.views.prepare_data_import_attempts_do'),
-
-                       (r'^people/user_selected_these_dia_checkboxes$',
-                        'mysite.profile.views.user_selected_these_dia_checkboxes'),
 
                        (r'^test_404$', handler404),
 
@@ -460,10 +522,10 @@ urlpatterns = patterns('',
 
                        (r'^projects/', include('mysite.project.urls')),
 
-                       (r'^\+projects/$', lambda x:
+                       (r'^\projects/$', lambda x:
                         HttpResponsePermanentRedirect('/projects/')),
 
-                       (r'^\+projects/(.+)$', lambda request, path:
+                       (r'^\projects/(.+)$', lambda request, path:
                         HttpResponsePermanentRedirect('/projects/' + path)),
 
                        (r'^ projects/', lambda x:
@@ -493,27 +555,23 @@ urlpatterns = patterns('',
 
                        # regex for the robots.txt file, for search engine
                        # exclusion
-                       (r'^robots\.txt$', direct_to_template,
-                        {'template': 'robots.txt', 'mimetype': 'text/plain'}),
+                       (r'^robots\.txt$', mysite.base.views.render_robots_txt),
 
                        # the OpenHatch guide
-                       (r'^guide/$', direct_to_template,
-                        {'template': 'base/guide.html'}),
+                       (r'^guide/$', TemplateView.as_view(template_name="base/guide.html")),
 
                        # the OpenHatch events page
-                       (r'^events/$', direct_to_template,
-                        {'template': 'base/events.html'}),
+                       (r'^events/$', TemplateView.as_view(template_name="base/events.html")),
 
                        # the OpenHatch sponsors page
-                       (r'^sponsors/$', direct_to_template,
-                        {'template': 'base/sponsors.html'}),
+                       (r'^sponsors/$', TemplateView.as_view(template_name="base/sponsors.html")),
 
                        # the OpenHatch donate page
-                       (r'^donate/$', direct_to_template,
-                        {'template': 'base/donate.html'}),
+                       (r'^donate/$', TemplateView.as_view(template_name="base/donate.html")),
                        # the OpenHatch donate page
-                       (r'^donate/t-shirts/$', direct_to_template,
-                        {'template': 'base/shirts.html'}),
+                       (r'^donate/t-shirts/$', TemplateView.as_view(template_name="base/shirts.html")),
+
+                       url('social/', include('social.apps.django_app.urls', namespace='social')),
 
                        # This dangerous regex is last
                        (r'^people/(?P<user_to_display__username>[^/]+)/$',

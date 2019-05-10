@@ -17,18 +17,38 @@ exec >>"$SCRAPY_LOG" 2>&1
 chmod 644 "$SCRAPY_LOG"
 
 MAX_TRACKERS="500"
-if [ ! -z "$1" ] ; then
-    MAX_TRACKERS="$1"
+if [ ! -z "$2" ] ; then
+    MAX_TRACKERS="$2"
 fi
 
-if [ ! -z "$2" ] ; then
-    TRACKER_ID="$2"
+if [ ! -z "$3" ] ; then
+    TRACKER_ID="$3"
 fi
 
 URL=https://openhatch.org/+api/v1/customs/tracker_model/\?just_stale\=yes\&format\=yaml\&limit\="$MAX_TRACKERS"\&tracker_id="$TRACKER_ID"
 
-# It's OK if curl has to try 4 times.
-(curl "$URL" || curl "$URL" || curl "$URL" || curl "$URL") > "$BUG_TRACKER_LIST"
+function grab_bug_tracker_list() {
+    # Try to download $URL. If curl bails on us, then
+    # we exit 1.
+    curl "$URL" > "$BUG_TRACKER_LIST" || return 1
+
+    # Sanity-check the document -- is it actually YAML, or
+    # is it a "helpful" CloudFlare error message? To do this
+    # check, we ask Python to parse this document, and if it
+    # bails out, then we also return 1.
+    if DJANGO_SETTINGS_MODULE='mysite.settings' python -c "import vendor; vendor.vendorify(); import tastypie.serializers; import yaml; yaml.load(open('$BUG_TRACKER_LIST'), Loader=tastypie.serializers.TastypieLoader)"
+    then
+    # Amazing. It is valid YAML. Exit succesfully.
+        return 0
+    else
+        echo 'sleeping for 20 sec'
+        sleep 20
+        return 1
+    fi
+}
+
+# It's OK if curl has to try 40 times.
+grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || grab_bug_tracker_list || exit 1
 
 pushd ../oh-bugimporters
 env/bin/python bugimporters/main.py -i "$BUG_TRACKER_LIST" -o "$SCRAPY_RESULT_FILE"

@@ -30,10 +30,7 @@
  *
  *  6.  On each ping the server responds with a JSONified Python list comprising:
  *      - the Citations we've found so far
- *      - the DataImportAttempts used to find them
  *  
- *  7.  If all the DataImportAttempts read 'I'm done!',
- *      we tell the user "We're done!"
  */
 
 if (typeof want_importer == 'undefined') {
@@ -107,67 +104,6 @@ $.fn.setThrobberStatus = function(theStatus) {
     // }}}
 };
 
-enableThrobbersThenPollForStatusForever = function() {
-    // {{{
-
-    // Ask server for a list of dias, which will tell us
-    // which importation background jobs have finished,
-    // and if they finished successfully.
-    var are_they_done_url = "/people/gimme_json_that_says_that_commit_importer_is_done";
-    var allDone = undefined;
-    var ask_if_done = function () {
-        console.log('Asking if done yet.');
-        var callback = function(dias) {
-            var allSeemsDone = true;
-            /*console.log(dias);*/
-            for (var d = 0; d < dias.length; d++) {
-                var dia = dias[d];
-                /*console.debug("while polling for status, server returned this dia", dia);*/
-                var $throbber = $('');
-                /*console.debug("while polling for status, attempted to set status of throbber for checkbox: ", $checkbox.get(0));*/
-                var diaStatus = null;
-                if (dia.fields.completed) {
-                    diaStatus = dia.fields.failed ? "failed" : "succeeded";
-                }
-                else {
-                    diaStatus = 'working';
-                }
-                $(findThrobbersForDia(dia)).each(function () {
-                        $(this).setThrobberStatus(diaStatus);
-                        });
-                if (diaStatus == 'working') {
-                    allSeemsDone = false;
-                }
-            }
-            allDone = allSeemsDone;
-        };
-        $.getJSON(are_they_done_url, callback);
-
-        // Stop asking when all the data imports have finished,
-        // successfully or not.
-        if (allDone) {
-            console.log('All the jobs have finished!');
-            window.clearInterval(window.askIfDoneInterval);
-            $('#jobs-are-done').show();
-        }
-    }
-    window.askIfDoneInterval = window.setInterval(ask_if_done, 1000);
-    // }}}
-};
-
-findThrobbersForDia = function(dia) {
-    var $throbbers = $('.throbber');
-    var matching = [];
-    var pushIfMatch = function () {
-        $throbber = $(this);
-        if ($throbber.data('query') == dia.fields.query
-                && $throbber.data('source') == dia.fields.source) {
-            matching.push($throbber);
-        }
-    };
-    $throbbers.each(pushIfMatch);
-    return matching;
-};
 
 Preparation = {
     // {{{
@@ -182,7 +118,6 @@ Preparation = {
         fireunit.ok(typeof query != 'undefined', "query: " + query);
 
         var data = {'format': 'success_code'};
-
         // About the below; the old POST handler used to expect
         // a digit instead of "x", but I don't think it will matter.
         data['commit_username_x'] = query;
@@ -196,6 +131,7 @@ Preparation = {
     }
     // }}}
 };
+
 
 Submission = {
     // {{{
@@ -212,7 +148,6 @@ Submission = {
         Submission.$form.submit(Submission.handler);
     },
     'callback': function (response) {
-        enableThrobbersThenPollForStatusForever();
         $('input', Submission.$form).attr('disabled', 'disabled');
     }
     // }}}
@@ -239,17 +174,6 @@ runTests = function () {
         tests[t](); 
     }
 };
-//$(runTests);
-
-/* Probably remove this.
-diaCheckboxChangeHandler = function() {
-    // {{{
-    var $checkbox = $(this);
-    var checked = $checkbox.is(':checked')
-    $checkbox.parent()[(checked?'add':'remove') + 'Class']('selected');
-    // }}}
-};
-*/
 
 mockedPortfolioResponse = null;
 askServerForPortfolio_wasCalled = false;
@@ -309,7 +233,7 @@ $.fn.htmlSmart = function(html) {
 function updatePortfolio(response) {
     /* Input: A whole bunch of (decoded) JSON data containing
      * all of the user's Citations, PortfolioEntries, and Projects,
-     * summaries for those Citations, and DataImportAttempts.
+     * summaries for those Citations,
      
      * Output: Nothing.
 
@@ -412,7 +336,7 @@ function updatePortfolio(response) {
         var $addto = $pname;
         var $link = $('a', $pname);
         if ($link && $link.length) {
-            $link.attrSmart('href', '/+projects/' + project_we_refer_to.fields.name);
+            $link.attrSmart('href', '/projects/' + project_we_refer_to.fields.name);
             $addto = $link;
         }
         $addto.textSmart(project_we_refer_to.fields.name);
@@ -471,12 +395,6 @@ function updatePortfolio(response) {
     }
 
     bindEventHandlers();
-
-    if (typeof response.messages != 'undefined') {
-        for (var m = 0; m < response.messages.length; m++) {
-            Notifier.displayMessage(response.messages[m]);
-        };
-    }
 
     SaveAllButton.updateDisplay();
 
@@ -664,6 +582,7 @@ FlagIcon.flag = function () {
     var $flaggerLink = $(this);
 
     FlagIcon.postOptions.data = {
+        'csrfmiddlewaretoken': $.cookie('csrftoken'),
         'portfolio_entry__pk': $flaggerLink.closest('.portfolio_entry')
             .attr('portfolio_entry__pk')
     };
@@ -782,6 +701,16 @@ PortfolioEntry.Save.save = function () {
     $saveLink = $(this);
 
     $pfEntry = $saveLink.closest('.portfolio_entry');
+
+    // Do some client-side validation.
+    $projectName = $pfEntry.find('input.project_name');
+    if ($projectName.size() === 1) {
+        if ($projectName.val() === "" || $projectName.val() === $projectName.attr('title')) {
+            alert("Couldn't save one of your projects. Did you forget to type a project name?");
+            return false;
+        }
+    }
+    
     Notifier.displayMessage('Saving, please wait!');
     var $updateIcon = $pfEntry.find('.actions li#update_icon');
     $updateIcon.toggle();
@@ -790,15 +719,9 @@ PortfolioEntry.Save.save = function () {
         $savePublishButton.remove();
     }
 
-    // Do some client-side validation.
-    $projectName = $pfEntry.find('input.project_name');
-    if ($projectName.size() === 1) {
-        if ($projectName.val() === $projectName.attr('title')) {
-            alert("Couldn't save one of your projects. Did you forget to type a project name?");
-            return false;
-        }
-    }
+
     PortfolioEntry.Save.postOptions.data = {
+        'csrfmiddlewaretoken': $.cookie('csrftoken'),
         'portfolio_entry__pk': $pfEntry.attr('portfolio_entry__pk'),
         'project_name': $pfEntry.find('.project_name').val(),
         'project_description': $pfEntry.find('.project_description').val(),
@@ -853,6 +776,7 @@ PortfolioEntry.Delete.deleteIt = function (deleteLink) {
     }
     else {
         PortfolioEntry.Delete.postOptions.data = {
+            'csrfmiddlewaretoken': $.cookie('csrftoken'),
             'portfolio_entry__pk': $pfEntry.attr('portfolio_entry__pk'),
         };
         PortfolioEntry.Delete.post();
@@ -1037,6 +961,21 @@ $(PortfolioEntry.Add.init);
 /*
  *      Re-order projects
  *-------------------------*/
+function getCookie(name) {
+    var cookieValue = null;
+    if (document.cookie && document.cookie != '') {
+        var cookies = document.cookie.split(';');
+        for (var i = 0; i < cookies.length; i++) {
+            var cookie = jQuery.trim(cookies[i]);
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
 
 PortfolioEntry.Reorder = {
     '$list': null,
@@ -1097,10 +1036,13 @@ PortfolioEntry.Reorder = {
                 $(this).text('Working...').attr('disabled','disabled');
                 PortfolioEntry.Reorder.$done_reordering = $(this);
 
+                var csrftoken = getCookie('csrftoken');
+
                 var options = {
                     'type': 'POST',
                     'url': '/+do/save_portfolio_entry_ordering_do',
                     'data': query_string,
+                    headers: { "X-CSRFToken": csrftoken },
                     'success': function () {
                         PortfolioEntry.Reorder.$list.remove();
                         $('#portfolio_entries *').not('.loading_message').remove();

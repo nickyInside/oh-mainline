@@ -32,6 +32,7 @@
             {% endblock whole_title %}
         </title>
 
+
         <link rel="shortcut icon" href="/favicon.ico" />
 	{% block canonical_link_tag %}
         <link rel="canonical" href="https://openhatch.org{{ request.get_full_path }}" />
@@ -39,6 +40,7 @@
         <meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />
         <meta http-equiv='Content-Language' content='en-us' />
         <meta name='Description' content='OpenHatch, the open source involvement engine.'>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
         <style type='text/css'> /*<![CDATA[*/
             {% block css %}
@@ -151,9 +153,8 @@
                     {% block content %}
                     {% endblock content %}
                 </div><!-- /#content -->
-                
+		<div class="clearfix"></div>
         </div><!-- /#container -->
-        </div>
 
         <div id='footer-wrapper'>
           <div id='footer'>
@@ -174,11 +175,13 @@
 	      <div class="column">
 		<h3>OpenHatch web app code</h3>
 		<ul>
-		  <li><a href="http://openhatch.readthedocs.org/en/latest/README.html">Intro for developers</a></li>
+		  <li><a href="http://openhatch.readthedocs.org/en/latest">Intro for developers</a></li>
 		  <li><a href="https://github.com/openhatch/oh-mainline">Github (source code)</a></li>
 		  <li><a href="http://lists.openhatch.org/mailman/listinfo/devel">Devel mailing list</a></li>
-		  <li><a href="http://openhatch.readthedocs.org/">Code docs</a></li>
 		  <li><a href="https://openhatch.org/bugs/">Bug tracker</a></li>
+		  {% if current_commit_hash %}
+		  <li><a href="https://github.com/openhatch/oh-mainline/commit/{{ current_commit_hash }}">SHA-1: {{ current_commit_hash }}</a></li>
+		  {% endif %}
 		</ul>
 	      </div>
 
@@ -189,6 +192,21 @@
                   <li><a href="http://forum.openhatch.org/">forum</a></li>
 		</ul>
 	      </div>
+              <!-- Google Custom Search Box -->
+              <script>
+                  (function() {
+                    var cx = '005653286234967232733:xv_tz2v3ive';
+                    var gcse = document.createElement('script');
+                    gcse.type = 'text/javascript';
+                    gcse.async = true;
+                    gcse.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') +
+                        '//www.google.com/cse/cse.js?cx=' + cx;
+                    var s = document.getElementsByTagName('script')[0];
+                    s.parentNode.insertBefore(gcse, s);
+                  })();
+                </script>
+                <gcse:search></gcse:search>
+             <!-- end Google Custom Search Box -->
 	    </div>
             {% endblock footer %}
           </div>

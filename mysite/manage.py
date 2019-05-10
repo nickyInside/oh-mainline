@@ -1,25 +1,17 @@
 #!/usr/bin/env python
-
-# We must chdir() up one level.
 import os
-import os.path
 import sys
-THIS_FILE = os.path.abspath(__file__)
-THIS_DIR = os.path.dirname(THIS_FILE)
-UP_ONE_DIR = os.path.join(THIS_DIR, '..')
-sys.path.append(UP_ONE_DIR)
 
-# Use the modules in vendor/
-import vendor
-vendor.vendorify()
+if __name__ == '__main__':
+    # The real manage.py is one directory up. So we switch to that directory, which
+    # is admittedly a little odd. It means that we get consistent paths for things
+    # like static assets no matter if you run manage.py or mysite/manage.py.
+    os.chdir('..')
 
-# Now we can import from third-party libraries.
-from django.core.management import execute_manager, setup_environ
+    # We have to add the new current working directory to sys.path, because
+    # Python's sys.path was calculcated when this file (mysite/manage.py) was
+    # started initially. We only really needs this for the vendor/ directory.
+    sys.path.append(os.getcwd())
 
-import mysite.settings
-
-# The first thing execute_manager does is call `setup_environ`.
-setup_environ(mysite.settings)
-
-if __name__ == "__main__":
-    execute_manager(mysite.settings)
+    # Now, act as though nothing is wrong.
+    execfile('manage.py', globals(), locals())

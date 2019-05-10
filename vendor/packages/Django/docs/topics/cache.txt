@@ -39,6 +39,8 @@ Django also works well with "upstream" caches, such as `Squid
 caches that you don't directly control but to which you can provide hints (via
 HTTP headers) about which parts of your site should be cached, and how.
 
+.. _setting-up-the-cache:
+
 Setting up the cache
 ====================
 
@@ -51,29 +53,23 @@ Your cache preference goes in the :setting:`CACHES` setting in your
 settings file. Here's an explanation of all available values for
 :setting:`CACHES`.
 
-.. versionchanged:: 1.3
-    The settings used to configure caching changed in Django 1.3. In
-    Django 1.2 and earlier, you used a single string-based
-    :setting:`CACHE_BACKEND` setting to configure caches. This has
-    been replaced with the new dictionary-based :setting:`CACHES`
-    setting.
-
 .. _memcached:
 
 Memcached
 ---------
 
-By far the fastest, most efficient type of cache available to Django, Memcached
-is an entirely memory-based cache framework originally developed to handle high
-loads at LiveJournal.com and subsequently open-sourced by Danga Interactive.
-It's used by sites such as Facebook and Wikipedia to reduce database access and
-dramatically increase site performance.
+By far the fastest, most efficient type of cache available to Django,
+Memcached__ is an entirely memory-based cache framework originally developed to
+handle high loads at LiveJournal.com and subsequently open-sourced by Danga
+Interactive.  It is used by sites such as Facebook and Wikipedia to reduce
+database access and dramatically increase site performance.
 
-Memcached is available for free at http://memcached.org/. It runs as a
-daemon and is allotted a specified amount of RAM. All it does is provide a
-fast interface for adding, retrieving and deleting arbitrary data in the cache.
-All data is stored directly in memory, so there's no overhead of database or
-filesystem usage.
+__ http://memcached.org/
+
+Memcached runs as a daemon and is allotted a specified amount of RAM. All it does is
+provide a fast interface for adding, retrieving and deleting arbitrary data in
+the cache.  All data is stored directly in memory, so there's no overhead of
+database or filesystem usage.
 
 After installing Memcached itself, you'll need to install a memcached
 binding. There are several python memcached bindings available; the
@@ -82,26 +78,17 @@ two most common are `python-memcached`_ and `pylibmc`_.
 .. _`python-memcached`: ftp://ftp.tummy.com/pub/python-memcached/
 .. _`pylibmc`: http://sendapatch.se/projects/pylibmc/
 
-.. versionchanged:: 1.2
-    In Django 1.0 and 1.1, you could also use ``cmemcache`` as a binding.
-    However, support for this library was deprecated in 1.2 due to
-    a lack of maintenance on the ``cmemcache`` library itself. Support for
-    ``cmemcache`` will be removed completely in Django 1.4.
-
-.. versionchanged:: 1.3
-    Support for ``pylibmc`` was added.
-
 To use Memcached with Django:
 
-    * Set :setting:`BACKEND <CACHES-BACKEND>` to
-      ``django.core.cache.backends.memcached.MemcachedCache`` or
-      ``django.core.cache.backends.memcached.PyLibMCCache`` (depending
-      on your chosen memcached binding)
+* Set :setting:`BACKEND <CACHES-BACKEND>` to
+  ``django.core.cache.backends.memcached.MemcachedCache`` or
+  ``django.core.cache.backends.memcached.PyLibMCCache`` (depending
+  on your chosen memcached binding)
 
-    * Set :setting:`LOCATION <CACHES-LOCATION>` to ``ip:port`` values,
-      where ``ip`` is the IP address of the Memcached daemon and ``port`` is the
-      port on which Memcached is running, or to a ``unix:path`` value, where
-      ``path`` is the path to a Memcached Unix socket file.
+* Set :setting:`LOCATION <CACHES-LOCATION>` to ``ip:port`` values,
+  where ``ip`` is the IP address of the Memcached daemon and ``port`` is the
+  port on which Memcached is running, or to a ``unix:path`` value, where
+  ``path`` is the path to a Memcached Unix socket file.
 
 In this example, Memcached is running on localhost (127.0.0.1) port 11211, using
 the ``python-memcached`` binding::
@@ -152,7 +139,7 @@ on the IP addresses 172.19.26.240 (port 11211), 172.19.26.242 (port 11212), and
             'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
             'LOCATION': [
                 '172.19.26.240:11211',
-                '172.19.26.242:11211',
+                '172.19.26.242:11212',
                 '172.19.26.244:11213',
             ]
         }
@@ -166,6 +153,8 @@ Without a doubt, *none* of the Django caching backends should be used for
 permanent storage -- they're all intended to be solutions for caching, not
 storage -- but we point this out here because memory-based caching is
 particularly temporary.
+
+.. _database-caching:
 
 Database caching
 ----------------
@@ -301,7 +290,7 @@ cache is multi-process and thread-safe. To use it, set
 
 The cache :setting:`LOCATION <CACHES-LOCATION>` is used to identify individual
 memory stores. If you only have one locmem cache, you can omit the
-:setting:`LOCATION <CACHES-LOCATION>`; however, if you have more that one local
+:setting:`LOCATION <CACHES-LOCATION>`; however, if you have more than one local
 memory cache, you will need to assign a name to at least one of them in
 order to keep them separate.
 
@@ -352,60 +341,57 @@ been well-tested and are easy to use.
 Cache arguments
 ---------------
 
-In addition to the defining the engine and name of the each cache
-backend, each cache backend can be given additional arguments to
-control caching behavior. These arguments are provided as additional
-keys in the :setting:`CACHES` setting. Valid arguments are as follows:
+Each cache backend can be given additional arguments to control caching
+behavior. These arguments are provided as additional keys in the
+:setting:`CACHES` setting. Valid arguments are as follows:
 
-    * :setting:`TIMEOUT <CACHES-TIMEOUT>`: The default timeout, in
-      seconds, to use for the cache. This argument defaults to 300
-      seconds (5 minutes).
+* :setting:`TIMEOUT <CACHES-TIMEOUT>`: The default timeout, in
+  seconds, to use for the cache. This argument defaults to ``300``
+  seconds (5 minutes).
 
-    * :setting:`OPTIONS <CACHES-OPTIONS>`: Any options that should be
-      passed to cache backend. The list options understood by each
-      backend vary with each backend.
+* :setting:`OPTIONS <CACHES-OPTIONS>`: Any options that should be
+  passed to the cache backend. The list of valid options will vary
+  with each backend, and cache backends backed by a third-party library
+  will pass their options directly to the underlying cache library.
 
-      Cache backends that implement their own culling strategy (i.e.,
-      the ``locmem``, ``filesystem`` and ``database`` backends) will
-      honor the following options:
+  Cache backends that implement their own culling strategy (i.e.,
+  the ``locmem``, ``filesystem`` and ``database`` backends) will
+  honor the following options:
 
-        * ``MAX_ENTRIES``: the maximum number of entries allowed in
-          the cache before old values are deleted. This argument
-          defaults to ``300``.
+  * ``MAX_ENTRIES``: The maximum number of entries allowed in
+    the cache before old values are deleted. This argument
+    defaults to ``300``.
 
-        * ``CULL_FREQUENCY``: The fraction of entries that are culled
-          when ``MAX_ENTRIES`` is reached. The actual ratio is
-          ``1/CULL_FREQUENCY``, so set ``CULL_FREQUENCY``: to ``2`` to
-          cull half of the entries when ``MAX_ENTRIES`` is reached.
+  * ``CULL_FREQUENCY``: The fraction of entries that are culled
+    when ``MAX_ENTRIES`` is reached. The actual ratio is
+    ``1 / CULL_FREQUENCY``, so set ``CULL_FREQUENCY`` to ``2`` to
+    cull half the entries when ``MAX_ENTRIES`` is reached. This argument
+    should be an integer and defaults to ``3``.
 
-          A value of ``0`` for ``CULL_FREQUENCY`` means that the
-          entire cache will be dumped when ``MAX_ENTRIES`` is reached.
-          This makes culling *much* faster at the expense of more
-          cache misses.
+    A value of ``0`` for ``CULL_FREQUENCY`` means that the
+    entire cache will be dumped when ``MAX_ENTRIES`` is reached.
+    On some backends (``database`` in particular) this makes culling *much*
+    faster at the expense of more cache misses.
 
-      Cache backends backed by a third-party library will pass their
-      options directly to the underlying cache library. As a result,
-      the list of valid options depends on the library in use.
+* :setting:`KEY_PREFIX <CACHES-KEY_PREFIX>`: A string that will be
+  automatically included (prepended by default) to all cache keys
+  used by the Django server.
 
-    * :setting:`KEY_PREFIX <CACHES-KEY_PREFIX>`: A string that will be
-      automatically included (prepended by default) to all cache keys
-      used by the Django server.
+  See the :ref:`cache documentation <cache_key_prefixing>` for
+  more information.
 
-      See the :ref:`cache documentation <cache_key_prefixing>` for
-      more information.
+* :setting:`VERSION <CACHES-VERSION>`: The default version number
+  for cache keys generated by the Django server.
 
-    * :setting:`VERSION <CACHES-VERSION>`: The default version number
-      for cache keys generated by the Django server.
+  See the :ref:`cache documentation <cache_versioning>` for more
+  information.
 
-      See the :ref:`cache documentation <cache_versioning>` for more
-      information.
+* :setting:`KEY_FUNCTION <CACHES-KEY_FUNCTION>`
+  A string containing a dotted path to a function that defines how
+  to compose a prefix, version and key into a final cache key.
 
-    * :setting:`KEY_FUNCTION <CACHES-KEY_FUNCTION>`
-      A string containing a dotted path to a function that defines how
-      to compose a prefix, version and key into a final cache key.
-
-      See the :ref:`cache documentation <cache_key_transformation>`
-      for more information.
+  See the :ref:`cache documentation <cache_key_transformation>`
+  for more information.
 
 In this example, a filesystem backend is being configured with a timeout
 of 60 seconds, and a maximum capacity of 1000 items::
@@ -455,8 +441,10 @@ Then, add the following required settings to your Django settings file:
   the site, or some other string that is unique to this Django instance, to
   prevent key collisions. Use an empty string if you don't care.
 
-The cache middleware caches every page that doesn't have GET or POST
-parameters. Optionally, if the :setting:`CACHE_MIDDLEWARE_ANONYMOUS_ONLY`
+The cache middleware caches GET and HEAD responses with status 200, where the request
+and response headers allow. Responses to requests for the same URL with different
+query parameters are considered to be unique pages and are cached separately.
+Optionally, if the :setting:`CACHE_MIDDLEWARE_ANONYMOUS_ONLY`
 setting is ``True``, only anonymous requests (i.e., not those made by a
 logged-in user) will be cached. This is a simple and effective way of disabling
 caching for any user-specific pages (including Django's admin interface). Note
@@ -469,14 +457,14 @@ response for HEAD request.
 Additionally, the cache middleware automatically sets a few headers in each
 :class:`~django.http.HttpResponse`:
 
-    * Sets the ``Last-Modified`` header to the current date/time when a fresh
-      (uncached) version of the page is requested.
+* Sets the ``Last-Modified`` header to the current date/time when a fresh
+  (uncached) version of the page is requested.
 
-    * Sets the ``Expires`` header to the current date/time plus the defined
-      :setting:`CACHE_MIDDLEWARE_SECONDS`.
+* Sets the ``Expires`` header to the current date/time plus the defined
+  :setting:`CACHE_MIDDLEWARE_SECONDS`.
 
-    * Sets the ``Cache-Control`` header to give a max age for the page --
-      again, from the :setting:`CACHE_MIDDLEWARE_SECONDS` setting.
+* Sets the ``Cache-Control`` header to give a max age for the page --
+  again, from the :setting:`CACHE_MIDDLEWARE_SECONDS` setting.
 
 See :doc:`/topics/http/middleware` for more on middleware.
 
@@ -490,22 +478,23 @@ more on these decorators.
 
 .. _i18n-cache-key:
 
-.. versionadded:: 1.2
-
 If :setting:`USE_I18N` is set to ``True`` then the generated cache key will
-include the name of the active :term:`language<language code>`.
-This allows you to easily cache multilingual sites without having to create
-the cache key yourself.
+include the name of the active :term:`language<language code>` -- see also
+:ref:`how-django-discovers-language-preference`). This allows you to easily
+cache multilingual sites without having to create the cache key yourself.
 
-See :doc:`/topics/i18n/deployment` for more on how Django discovers the active
-language.
+.. versionchanged:: 1.4
+
+Cache keys also include the active :term:`language <language code>` when
+:setting:`USE_L10N` is set to ``True`` and the :ref:`current time zone
+<default-current-time-zone>` when :setting:`USE_TZ` is set to ``True``.
 
 __ `Controlling cache: Using other headers`_
 
 The per-view cache
 ==================
 
-.. function ``django.views.decorators.cache.cache_page``
+.. function:: django.views.decorators.cache.cache_page
 
 A more granular way to use the caching framework is by caching the output of
 individual views. ``django.views.decorators.cache`` defines a ``cache_page``
@@ -583,11 +572,10 @@ Here's the same thing, with ``my_view`` wrapped in ``cache_page``::
     from django.views.decorators.cache import cache_page
 
     urlpatterns = ('',
-        (r'^foo/(\d{1,2})/$', cache_page(my_view, 60 * 15)),
+        (r'^foo/(\d{1,2})/$', cache_page(60 * 15)(my_view)),
     )
 
-If you take this approach, don't forget to import ``cache_page`` within your
-URLconf.
+.. templatetag:: cache
 
 Template fragment caching
 =========================
@@ -598,7 +586,8 @@ the ``cache`` template tag. To give your template access to this tag, put
 
 The ``{% cache %}`` template tag caches the contents of the block for a given
 amount of time. It takes at least two arguments: the cache timeout, in seconds,
-and the name to give the cache fragment. For example:
+and the name to give the cache fragment. The name will be taken as is, do not
+use a variable. For example:
 
 .. code-block:: html+django
 
@@ -675,11 +664,28 @@ dictionaries, lists of model objects, and so forth. (Most common Python objects
 can be pickled; refer to the Python documentation for more information about
 pickling.)
 
+Accessing the cache
+-------------------
+
+.. function:: django.core.cache.get_cache(backend, **kwargs)
+
 The cache module, ``django.core.cache``, has a ``cache`` object that's
 automatically created from the ``'default'`` entry in the :setting:`CACHES`
 setting::
 
     >>> from django.core.cache import cache
+
+If you have multiple caches defined in :setting:`CACHES`, then you can use
+:func:`django.core.cache.get_cache` to retrieve a cache object for any key::
+
+    >>> from django.core.cache import get_cache
+    >>> cache = get_cache('alternate')
+
+If the named key does not exist, ``InvalidCacheBackendError`` will be raised.
+
+
+Basic usage
+-----------
 
 The basic interface is ``set(key, value, timeout)`` and ``get(key)``::
 
@@ -688,7 +694,7 @@ The basic interface is ``set(key, value, timeout)`` and ``get(key)``::
     'hello, world!'
 
 The ``timeout`` argument is optional and defaults to the ``timeout``
-argument of the ``'default'`` backend in :setting:`CACHES` setting
+argument of the appropriate backend in the :setting:`CACHES` setting
 (explained above). It's the number of seconds the value should be stored
 in the cache.
 
@@ -732,8 +738,6 @@ actually exist in the cache (and haven't expired)::
     >>> cache.get_many(['a', 'b', 'c'])
     {'a': 1, 'b': 2, 'c': 3}
 
-.. versionadded:: 1.2
-
 To set multiple values more efficiently, use ``set_many()`` to pass a dictionary
 of key-value pairs::
 
@@ -748,14 +752,10 @@ clearing the cache for a particular object::
 
     >>> cache.delete('a')
 
-.. versionadded:: 1.2
-
 If you want to clear a bunch of keys at once, ``delete_many()`` can take a list
 of keys to be cleared::
 
     >>> cache.delete_many(['a', 'b', 'c'])
-
-.. versionadded:: 1.2
 
 Finally, if you want to delete all the keys in the cache, use
 ``cache.clear()``.  Be careful with this; ``clear()`` will remove *everything*
@@ -793,8 +793,6 @@ nonexistent cache key.::
 Cache key prefixing
 -------------------
 
-.. versionadded:: 1.3
-
 If you are sharing a cache instance between servers, or between your
 production and development environments, it's possible for data cached
 by one server to be used by another server. If the format of cached
@@ -814,8 +812,6 @@ collisions in cache values.
 
 Cache versioning
 ----------------
-
-.. versionadded:: 1.3
 
 When you change running code that uses cached values, you may need to
 purge any existing cached values. The easiest way to do this is to
@@ -843,7 +839,7 @@ key version to set or get. For example::
     'hello world!'
 
 The version of a specific key can be incremented and decremented using
-the :func:`incr_version()` and :func:`decr_version()` methods. This
+the ``incr_version()`` and ``decr_version()`` methods. This
 enables specific keys to be bumped to a new version, leaving other
 keys unaffected. Continuing our previous example::
 
@@ -864,15 +860,13 @@ keys unaffected. Continuing our previous example::
 Cache key transformation
 ------------------------
 
-.. versionadded:: 1.3
-
 As described in the previous two sections, the cache key provided by a
 user is not used verbatim -- it is combined with the cache prefix and
 key version to provide a final cache key. By default, the three parts
 are joined using colons to produce a final string::
 
     def make_key(key, key_prefix, version):
-        return ':'.join([key_prefix, str(version), smart_str(key)])
+        return ':'.join([key_prefix, str(version), key])
 
 If you want to combine the parts in different ways, or apply other
 processing to the final key (e.g., taking a hash digest of the key
@@ -880,13 +874,11 @@ parts), you can provide a custom key function.
 
 The :setting:`KEY_FUNCTION <CACHES-KEY_FUNCTION>` cache setting
 specifies a dotted-path to a function matching the prototype of
-:func:`make_key()` above. If provided, this custom key function will
+``make_key()`` above. If provided, this custom key function will
 be used instead of the default key combining function.
 
 Cache key warnings
 ------------------
-
-.. versionadded:: 1.3
 
 Memcached, the most commonly-used production cache backend, does not allow
 cache keys longer than 250 characters or containing whitespace or control
@@ -932,28 +924,28 @@ reaches your Web site.
 
 Here are a few examples of upstream caches:
 
-    * Your ISP may cache certain pages, so if you requested a page from
-      http://example.com/, your ISP would send you the page without having to
-      access example.com directly. The maintainers of example.com have no
-      knowledge of this caching; the ISP sits between example.com and your Web
-      browser, handling all of the caching transparently.
+* Your ISP may cache certain pages, so if you requested a page from
+  http://example.com/, your ISP would send you the page without having to
+  access example.com directly. The maintainers of example.com have no
+  knowledge of this caching; the ISP sits between example.com and your Web
+  browser, handling all of the caching transparently.
 
-    * Your Django Web site may sit behind a *proxy cache*, such as Squid Web
-      Proxy Cache (http://www.squid-cache.org/), that caches pages for
-      performance. In this case, each request first would be handled by the
-      proxy, and it would be passed to your application only if needed.
+* Your Django Web site may sit behind a *proxy cache*, such as Squid Web
+  Proxy Cache (http://www.squid-cache.org/), that caches pages for
+  performance. In this case, each request first would be handled by the
+  proxy, and it would be passed to your application only if needed.
 
-    * Your Web browser caches pages, too. If a Web page sends out the
-      appropriate headers, your browser will use the local cached copy for
-      subsequent requests to that page, without even contacting the Web page
-      again to see whether it has changed.
+* Your Web browser caches pages, too. If a Web page sends out the
+  appropriate headers, your browser will use the local cached copy for
+  subsequent requests to that page, without even contacting the Web page
+  again to see whether it has changed.
 
 Upstream caching is a nice efficiency boost, but there's a danger to it:
 Many Web pages' contents differ based on authentication and a host of other
 variables, and cache systems that blindly save pages based purely on URLs could
 expose incorrect or sensitive data to subsequent visitors to those pages.
 
-For example, say you operate a Web e-mail system, and the contents of the
+For example, say you operate a Web email system, and the contents of the
 "inbox" page obviously depend on which user is logged in. If an ISP blindly
 cached your site, then the first user who logged in through that ISP would have
 his user-specific inbox page cached for subsequent visitors to the site. That's
@@ -973,10 +965,6 @@ The ``Vary`` header defines which request headers a cache
 mechanism should take into account when building its cache key. For example, if
 the contents of a Web page depend on a user's language preference, the page is
 said to "vary on language."
-
-.. versionchanged:: 1.3
-    In Django 1.3 the full request path -- including the query -- is used
-    to create the cache keys, instead of only the path component in Django 1.2.
 
 By default, Django's cache system creates its cache keys using the requested
 path and query -- e.g., ``"/stories/2005/?order_by=author"``. This means every
@@ -1099,12 +1087,12 @@ entries may be cached on any shared cache. The following code uses
 There are a few other ways to control cache parameters. For example, HTTP
 allows applications to do the following:
 
-    * Define the maximum time a page should be cached.
+* Define the maximum time a page should be cached.
 
-    * Specify whether a cache should always check for newer versions, only
-      delivering the cached content when there are no changes. (Some caches
-      might deliver cached content even if the server page changed, simply
-      because the cache copy isn't yet expired.)
+* Specify whether a cache should always check for newer versions, only
+  delivering the cached content when there are no changes. (Some caches
+  might deliver cached content even if the server page changed, simply
+  because the cache copy isn't yet expired.)
 
 In Django, use the ``cache_control`` view decorator to specify these cache
 parameters. In this example, ``cache_control`` tells caches to revalidate the
@@ -1119,14 +1107,14 @@ cache on every access and to store cached versions for, at most, 3,600 seconds::
 Any valid ``Cache-Control`` HTTP directive is valid in ``cache_control()``.
 Here's a full list:
 
-    * ``public=True``
-    * ``private=True``
-    * ``no_cache=True``
-    * ``no_transform=True``
-    * ``must_revalidate=True``
-    * ``proxy_revalidate=True``
-    * ``max_age=num_seconds``
-    * ``s_maxage=num_seconds``
+* ``public=True``
+* ``private=True``
+* ``no_cache=True``
+* ``no_transform=True``
+* ``must_revalidate=True``
+* ``proxy_revalidate=True``
+* ``max_age=num_seconds``
+* ``s_maxage=num_seconds``
 
 For explanation of Cache-Control HTTP directives, see the `Cache-Control spec`_.
 
@@ -1154,12 +1142,15 @@ Other optimizations
 Django comes with a few other pieces of middleware that can help optimize your
 site's performance:
 
-    * ``django.middleware.http.ConditionalGetMiddleware`` adds support for
-      modern browsers to conditionally GET responses based on the ``ETag``
-      and ``Last-Modified`` headers.
+* ``django.middleware.http.ConditionalGetMiddleware`` adds support for
+  modern browsers to conditionally GET responses based on the ``ETag``
+  and ``Last-Modified`` headers.
 
-    * :class:`django.middleware.gzip.GZipMiddleware` compresses responses for all
-      moderns browsers, saving bandwidth and transfer time.
+* :class:`django.middleware.gzip.GZipMiddleware` compresses responses for all
+  modern browsers, saving bandwidth and transfer time. Be warned, however,
+  that compression techniques like ``GZipMiddleware`` are subject to attacks.
+  See the warning in :class:`~django.middleware.gzip.GZipMiddleware` for
+  details.
 
 Order of MIDDLEWARE_CLASSES
 ===========================
@@ -1175,9 +1166,9 @@ response phase. Thus, you need to make sure that ``UpdateCacheMiddleware``
 appears *before* any other middleware that might add something to the ``Vary``
 header. The following middleware modules do so:
 
-    * ``SessionMiddleware`` adds ``Cookie``
-    * ``GZipMiddleware`` adds ``Accept-Encoding``
-    * ``LocaleMiddleware`` adds ``Accept-Language``
+* ``SessionMiddleware`` adds ``Cookie``
+* ``GZipMiddleware`` adds ``Accept-Encoding``
+* ``LocaleMiddleware`` adds ``Accept-Language``
 
 ``FetchFromCacheMiddleware``, on the other hand, runs during the request phase,
 where middleware is applied first-to-last, so an item at the top of the list

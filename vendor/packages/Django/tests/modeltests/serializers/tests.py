@@ -1,16 +1,21 @@
+from __future__ import absolute_import, unicode_literals
+
 # -*- coding: utf-8 -*-
+import json
 from datetime import datetime
-from StringIO import StringIO
 from xml.dom import minidom
 
 from django.conf import settings
 from django.core import serializers
-from django.db import transaction
+from django.db import transaction, connection
 from django.test import TestCase, TransactionTestCase, Approximate
-from django.utils import simplejson, unittest
+from django.utils import six
+from django.utils.six import StringIO
+from django.utils import unittest
 
-from models import Category, Author, Article, AuthorProfile, Actor, \
-                                    Movie, Score, Player, Team
+from .models import (Category, Author, Article, AuthorProfile, Actor, Movie,
+    Score, Player, Team)
+
 
 class SerializerRegistrationTests(unittest.TestCase):
     def setUp(self):
@@ -158,8 +163,8 @@ class SerializersTestBase(object):
 
     def test_serialize_unicode(self):
         """Tests that unicode makes the roundtrip intact"""
-        actor_name = u"Za\u017c\u00f3\u0142\u0107"
-        movie_title = u'G\u0119\u015bl\u0105 ja\u017a\u0144'
+        actor_name = "Za\u017c\u00f3\u0142\u0107"
+        movie_title = 'G\u0119\u015bl\u0105 ja\u017a\u0144'
         ac = Actor(name=actor_name)
         mv = Movie(title=movie_title, actor=ac)
         ac.save()
@@ -172,6 +177,19 @@ class SerializersTestBase(object):
         obj_list = list(serializers.deserialize(self.serializer_name, serial_str))
         mv_obj = obj_list[0].object
         self.assertEqual(mv_obj.title, movie_title)
+
+    def test_serialize_superfluous_queries(self):
+        """Ensure no superfluous queries are made when serializing ForeignKeys
+
+        #17602
+        """
+        ac = Actor(name='Actor name')
+        ac.save()
+        mv = Movie(title='Movie title', actor_id=ac.pk)
+        mv.save()
+
+        with self.assertNumQueries(0):
+            serial_str = serializers.serialize(self.serializer_name, [mv])
 
     def test_serialize_with_null_pk(self):
         """
@@ -225,7 +243,7 @@ class SerializersTestBase(object):
 
         serial_str = serializers.serialize(self.serializer_name, [a])
         date_values = self._get_field_values(serial_str, "pub_date")
-        self.assertEqual(date_values[0], "0001-02-03 04:05:06")
+        self.assertEqual(date_values[0].replace('T', ' '), "0001-02-03 04:05:06")
 
     def test_pkless_serialized_strings(self):
         """
@@ -252,8 +270,9 @@ class SerializersTransactionTestBase(object):
         transaction.enter_transaction_management()
         transaction.managed(True)
         objs = serializers.deserialize(self.serializer_name, self.fwd_ref_str)
-        for obj in objs:
-            obj.save()
+        with connection.constraint_checks_disabled():
+            for obj in objs:
+                obj.save()
         transaction.commit()
         transaction.leave_transaction_management()
 
@@ -277,7 +296,7 @@ class XmlSerializerTestCase(SerializersTestBase, TestCase):
     def _comparison_value(value):
         # The XML serializer handles everything as strings, so comparisons
         # need to be performed on the stringified value
-        return unicode(value)
+        return six.text_type(value)
 
     @staticmethod
     def _validate_output(serial_str):
@@ -317,7 +336,7 @@ class XmlSerializerTransactionTestCase(SerializersTransactionTestBase, Transacti
     <object pk="1" model="serializers.article">
         <field to="serializers.author" name="author" rel="ManyToOneRel">1</field>
         <field type="CharField" name="headline">Forward references pose no problem</field>
-        <field type="DateTimeField" name="pub_date">2006-06-16 15:00:00</field>
+        <field type="DateTimeField" name="pub_date">2006-06-16T15:00:00</field>
         <field to="serializers.category" name="categories" rel="ManyToManyRel">
             <object pk="1"></object>
         </field>
@@ -337,7 +356,7 @@ class JsonSerializerTestCase(SerializersTestBase, TestCase):
     @staticmethod
     def _validate_output(serial_str):
         try:
-            simplejson.loads(serial_str)
+            json.loads(serial_str)
         except Exception:
             return False
         else:
@@ -346,7 +365,7 @@ class JsonSerializerTestCase(SerializersTestBase, TestCase):
     @staticmethod
     def _get_pk_values(serial_str):
         ret_list = []
-        serial_list = simplejson.loads(serial_str)
+        serial_list = json.loads(serial_str)
         for obj_dict in serial_list:
             ret_list.append(obj_dict["pk"])
         return ret_list
@@ -354,7 +373,7 @@ class JsonSerializerTestCase(SerializersTestBase, TestCase):
     @staticmethod
     def _get_field_values(serial_str, field_name):
         ret_list = []
-        serial_list = simplejson.loads(serial_str)
+        serial_list = json.loads(serial_str)
         for obj_dict in serial_list:
             if field_name in obj_dict["fields"]:
                 ret_list.append(obj_dict["fields"][field_name])
@@ -368,7 +387,7 @@ class JsonSerializerTransactionTestCase(SerializersTransactionTestBase, Transact
         "model": "serializers.article",
         "fields": {
             "headline": "Forward references pose no problem",
-            "pub_date": "2006-06-16 15:00:00",
+            "pub_date": "2006-06-16T15:00:00",
             "categories": [1],
             "author": 1
         }
@@ -419,7 +438,7 @@ else:
         @staticmethod
         def _validate_output(serial_str):
             try:
-                yaml.load(StringIO(serial_str))
+                yaml.safe_load(StringIO(serial_str))
             except Exception:
                 return False
             else:
@@ -429,7 +448,7 @@ else:
         def _get_pk_values(serial_str):
             ret_list = []
             stream = StringIO(serial_str)
-            for obj_dict in yaml.load(stream):
+            for obj_dict in yaml.safe_load(stream):
                 ret_list.append(obj_dict["pk"])
             return ret_list
 
@@ -437,13 +456,13 @@ else:
         def _get_field_values(serial_str, field_name):
             ret_list = []
             stream = StringIO(serial_str)
-            for obj_dict in yaml.load(stream):
+            for obj_dict in yaml.safe_load(stream):
                 if "fields" in obj_dict and field_name in obj_dict["fields"]:
                     field_value = obj_dict["fields"][field_name]
-                    # yaml.load will return non-string objects for some
+                    # yaml.safe_load will return non-string objects for some
                     # of the fields we are interested in, this ensures that
                     # everything comes back as a string
-                    if isinstance(field_value, basestring):
+                    if isinstance(field_value, six.string_types):
                         ret_list.append(field_value)
                     else:
                         ret_list.append(str(field_value))

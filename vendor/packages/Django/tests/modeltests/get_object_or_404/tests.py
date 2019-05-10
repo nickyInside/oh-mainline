@@ -1,8 +1,10 @@
+from __future__ import absolute_import
+
 from django.http import Http404
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.test import TestCase
 
-from models import Author, Article
+from .models import Author, Article
 
 
 class GetObjectOr404Tests(TestCase):
@@ -77,4 +79,29 @@ class GetObjectOr404Tests(TestCase):
         self.assertEqual(
             get_list_or_404(Article.objects.all(), title__icontains="Run"),
             [article]
+        )
+
+    def test_bad_class(self):
+        # Given an argument klass that is not a Model, Manager, or Queryset
+        # raises a helpful ValueError message
+        self.assertRaisesMessage(ValueError,
+            "Object is of type 'str', but must be a Django Model, Manager, "
+            "or QuerySet",
+            get_object_or_404, "Article", title__icontains="Run"
+        )
+
+        class CustomClass(object):
+            pass
+
+        self.assertRaisesMessage(ValueError,
+            "Object is of type 'CustomClass', but must be a Django Model, "
+            "Manager, or QuerySet",
+            get_object_or_404, CustomClass, title__icontains="Run"
+        )
+
+        # Works for lists too
+        self.assertRaisesMessage(ValueError,
+            "Object is of type 'list', but must be a Django Model, Manager, "
+            "or QuerySet",
+            get_list_or_404, [Article], title__icontains="Run"
         )

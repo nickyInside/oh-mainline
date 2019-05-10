@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class Author(models.Model):
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
@@ -12,7 +13,7 @@ class Author(models.Model):
         # treated differently than fields.
         for k in kwargs:
             assert k in [f.attname for f in self._meta.fields], \
-                "Author.__init__ got an unexpected paramater: %s" % k
+                "Author.__init__ got an unexpected parameter: %s" % k
 
 class Book(models.Model):
     title = models.CharField(max_length=255)

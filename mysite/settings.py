@@ -1,11 +1,54 @@
-# Django settings for the basic OpenHatch 'mysite' project
+#Django settings for the basic OpenHatch 'mysite' project
 
 # Imports
+import subprocess
 import os
 import logging
 import datetime
 import sys
 import dj_database_url
+
+LOGGING_CONFIG = None
+LOGGING = {
+    'version': 1,
+    'formatters': {
+        'verbose': {
+            'format': '\n%(levelname)08s %(asctime)25s - %(name)25s - %(message)15s'
+        },
+        'simple': {
+            'format': '%(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'null': {
+            'class': 'django.utils.log.NullHandler',
+        },
+        'console':{
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['null'],
+            'propagate': False,
+            'level': 'INFO',
+        },
+        'django.request': {
+            'handlers': ['null'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'mysite': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        }
+    }
+}
+
+import logging.config
+logging.config.dictConfig(LOGGING)
 
 # Figure out where in the filesystem we are.
 DIRECTORY_CONTAINING_SETTINGS_PY = os.path.abspath(os.path.dirname(__file__))
@@ -13,6 +56,7 @@ DIRECTORY_CONTAINING_SETTINGS_PY = os.path.abspath(os.path.dirname(__file__))
 MEDIA_ROOT_BEFORE_STATIC = DIRECTORY_CONTAINING_SETTINGS_PY
 
 # Now, actual settings
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 DEBUG = True
 TEMPLATE_DEBUG = DEBUG
 
@@ -47,22 +91,18 @@ if 'DATABASE_URL' in os.environ:
     DATABASES = {'default': dj_database_url.config()}
 
 OTHER_DATABASES = {
-    'mysql': {
-        'NAME': 'oh_milestone_a',
-        'ENGINE': 'django.db.backends.mysql',
+    'postgres': {
+        'NAME': 'openhatch',
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'HOST': 'localhost',
-        'USER': 'oh_milestone_a',
-        'PASSWORD': 'ahmaC0Th',
-        'OPTIONS': {'read_default_file': os.path.join(os.path.dirname(__file__), 'my.cnf')},
+        'USER': 'postgres',
+        'PASSWORD': '',
         'CHARSET': 'utf8',
     },
 }
 
-if os.environ.get('USE_MYSQL', ''):
-    DATABASES['default'] = OTHER_DATABASES['mysql']
-    if os.environ.get('TRAVIS'):
-        DATABASES['default']['USER'] = 'travis'
-        DATABASES['default']['PASSWORD'] = ''
+if os.environ.get('USE_POSTGRES'):
+    DATABASES['default'] = OTHER_DATABASES['postgres']
 
 # Local time zone for this installation. Choices can be found here:
 # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
@@ -105,6 +145,8 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     'django.core.context_processors.media',
     'django.core.context_processors.request',
     'django_authopenid.context_processors.authopenid',
+    'social.apps.django_app.context_processors.backends',
+    'social.apps.django_app.context_processors.login_redirect',
 )
 
 # List of callables that know how to import templates from various sources.
@@ -126,8 +168,6 @@ MIDDLEWARE_CLASSES = [
     'django_authopenid.middleware.OpenIDMiddleware',
     'mysite.base.middleware.HandleWannaHelpQueue',
     'django.middleware.transaction.TransactionMiddleware',
-    # Django debug toolbar
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
 ]
 
 ROOT_URLCONF = 'mysite.urls'
@@ -145,6 +185,8 @@ STATIC_GENERATOR_URLS = (
     r'^/\+cacheable/',
 )
 
+STATIC_URL = '/statik/'
+
 STATIC_DOC_ROOT = 'static/'
 
 # Sessions in /tmp
@@ -159,6 +201,7 @@ INSTALLED_APPS = (
     'django.contrib.humanize',
     'django.contrib.sessions',
     'django.contrib.sites',
+    'django.contrib.staticfiles',
     'django.contrib.webdesign',
     'django.contrib.admin',
     'registration',
@@ -166,7 +209,6 @@ INSTALLED_APPS = (
     'django_extensions',
     'south',
     'django_assets',
-    'celery',
     'invitation',
     'mysite.search',
     'mysite.profile',
@@ -175,13 +217,17 @@ INSTALLED_APPS = (
     'mysite.base',
     'mysite.project',
     'mysite.missions',
+    'mysite.bugsets',
     'voting',
     'reversion',
     'debug_toolbar',
     'sessionprofile',
     'model_utils',
-    'djcelery',
     'djkombu',
+    'inplaceeditform',
+    'django_webtest',
+    'social.apps.django_app.default',
+    'httpproxy',
 )
 
 # testrunner allows us to control which testrunner to use
@@ -195,9 +241,7 @@ TEST_OUTPUT_DESCRIPTIONS = True
 
 TEST_OUTPUT_DIR = "test_output"
 
-# AMQP, Rabbit Queue, Celery
-BROKER_BACKEND = 'django'
-
+# AMQP, Rabbit Queue
 cooked_data_password = 'AXQaTjp3'
 AUTH_PROFILE_MODULE = "profile.Person"
 
@@ -208,10 +252,7 @@ OHLOH_API_KEY = 'JeXHeaQhjXewhdktn4nUw'  # This key is called "Oman testing"
                                         # at <https://www.ohloh.net/accounts/paulproteus/api_keys>
 # OHLOH_API_KEY='0cWqe4uPw7b8Q5337ybPQ' # This key is called "API testing"
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s %(funcName)s:%(lineno)d %(levelname)-8s %(message)s',
-)
+
 
 # Invite codes last seven days
 ACCOUNT_INVITATION_DAYS = 7
@@ -219,6 +260,12 @@ INVITE_MODE = False  # Enable this on production site ...?
 INVITATIONS_PER_USER = 100
 
 DEFAULT_FROM_EMAIL = 'all@openhatch.org'
+
+# If you're testing any of the email-related features locally, make sure the 'EMAIL_*" settings here are
+# un-commented, and then open a new terminal and type "python -m smtpd -n -c DebuggingServer localhost:1025"
+# to run a local email server.
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_PORT = 1025
 
 CACHES = {
     'default': {
@@ -258,84 +305,45 @@ FORWARDER_LIFETIME_TIMEDELTA = datetime.timedelta(days=10)
 # note about the above: for 3 days, 2 forwarders for the same user work.
 # at worst, you visit someone's profile and find a forwarder that works for 3 more days
 # at best, you visit someone's profile and find a forwarder that works for 5 more days
-# at worst, we run a postfixifying celery job once every two days for each user
 
-POSTFIX_FORWARDER_TABLE_PATH = None  # Disabled by default
+# Note: POSTFIX_FORWARDER_TABLE_PATH is disabled by default in settings.py
+#       while it is enabled in the deployment_settings.py
+#       See documentation in advanced_installation.rst for more details
+POSTFIX_FORWARDER_TABLE_PATH = None
 
 CACHE_MIDDLEWARE_ANONYMOUS_ONLY = True
-
-# CELERY_ALWAYS_EAGER = True # This is set to True in the test runner also.
 
 WEB_ROOT = os.path.join(MEDIA_ROOT, '_cache')
 
 SERVER_NAME = 'openhatch.org'
 
-SVN_REPO_PATH = os.path.abspath(
-    os.path.join(MEDIA_ROOT_BEFORE_STATIC, 'missions-userdata', 'svn'))
+SVN_REPO_PATH = os.path.abspath(os.path.join(MEDIA_ROOT_BEFORE_STATIC, 'missions-userdata', 'svn'))
 
 # This should include a trailing slash.
 # For local sites, this is what you checkout
 SVN_REPO_URL_PREFIX = 'file://' + SVN_REPO_PATH + '/'
 
+# This path is used when determining whether to run svn mission tests
+SVNADMIN_PATH = '/usr/bin/svnadmin'
+
 # The script to invoke for management commands in this environment.
 PATH_TO_MANAGEMENT_SCRIPT = os.path.abspath(
     os.path.join(DIRECTORY_CONTAINING_SETTINGS_PY, '../manage.py'))
-CELERY_ALWAYS_EAGER = True
 SOUTH_TESTS_MIGRATE = False
 
-GIT_REPO_PATH = os.path.join(
-    MEDIA_ROOT_BEFORE_STATIC, 'missions-userdata', 'git')
+GIT_REPO_PATH = os.path.join(MEDIA_ROOT_BEFORE_STATIC, 'missions-userdata', 'git')
 # For local sites, this is what you clone
 GIT_REPO_URL_PREFIX = GIT_REPO_PATH + '/'
+
+# user@host spec to use when SSHing into the remote node that contains
+# git and svn mission repositories.
+REMOTE_REPO_SETUP_ACCESS_SPEC = os.environ.get('REMOTE_REPO_SETUP_ACCESS_SPEC')
 
 # This setting is used by the customs bug importers.
 TRACKER_POLL_INTERVAL = 1  # Days
 
-# Initialize celery
-import djcelery
-djcelery.setup_loader()
-
-# By default, Django logs all SQL queries to stderr when DEBUG=True. This turns
-# that off.  If you want to see all SQL queries (e.g., when running a
-# management command locally), remove the stanza related to django.db.backends.
-#
-# Also, this setup sends an email to the site admins on every HTTP 500 error
-# when DEBUG=False.
-#
-# The lines relating to 'require_debug_false' should be enabled when the
-# project is upgraded to use Django 1.4.
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'filters': {
-        #        'require_debug_false': {
-        #            '()': 'django.utils.log.RequireDebugFalse'
-        #        },
-    },
-    'handlers': {
-        'null': {
-            'level': 'DEBUG',
-            'class': 'django.utils.log.NullHandler',
-        },
-        'mail_admins': {
-            'level': 'ERROR',
-            #            'filters': ['require_debug_false'],
-            'class': 'django.utils.log.AdminEmailHandler'
-        },
-    },
-    'loggers': {
-        'django.db.backends': {
-            'handlers': ['null'],  # Quiet by default!
-            'propagate': False,
-            'level': 'DEBUG',
-        },
-        'django.request': {
-            'handlers': ['mail_admins'],
-            'level': 'ERROR',
-            'propagate': True,
-        },
-    }
-}
+# Inline edit permissions
+ADAPTOR_INPLACEEDIT_EDIT = 'mysite.bugsets.perms.InlineEditPermissions'
 
 DOWNLOADED_GEOLITECITY_PATH = os.path.join(MEDIA_ROOT,
                                            '../../downloads/GeoLiteCity.dat')
@@ -351,11 +359,6 @@ if sys.platform.startswith('win'):
 RECOMMEND_BUGS = True
 
 ENABLE_NEW_IWH_HANDLER = False
-# Include a user's customizations
-try:
-    from local_settings import *
-except ImportError:
-    pass
 
 try:
     import bugimporters
@@ -366,3 +369,51 @@ except ImportError:
     except ImportError:
         # meh.
         pass
+
+AUTHENTICATION_BACKENDS = (
+    'social.backends.google.GoogleOAuth2',
+    'django.contrib.auth.backends.ModelBackend',
+)
+
+SOCIAL_AUTH_PIPELINE = (
+    'social.pipeline.social_auth.social_details',
+    'social.pipeline.social_auth.social_uid',
+    'social.pipeline.social_auth.auth_allowed',
+    'social.pipeline.social_auth.social_user',
+    'social.pipeline.user.get_username',
+    'social.pipeline.social_auth.associate_by_email',
+    'social.pipeline.user.create_user',
+    'social.pipeline.social_auth.associate_user',
+    'social.pipeline.social_auth.load_extra_data',
+    'social.pipeline.user.user_details'
+)
+
+# These secrets correspond to a gmail account that Asheesh created
+# called ohdevlogin at gmail.com. If you want the password for that
+# account, or need to log in to it for some reason, ask Asheesh for
+# it.
+#
+# Google OAuth2 login, unlike OpenID login before it,
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = '905249420634-7ii10lj0dcglujqo89hlnro3oncmq27k.apps.googleusercontent.com'
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = 'qA3pxSEa_ctja22wVNOtGBbr'
+
+# Include a user's customizations
+try:
+    from local_settings import *
+except ImportError:
+    pass
+
+# Settings for the IRC bot powering the IRC missions.
+IRC_MISSION_SERVER = ('chat.freenode.net', 6667)
+IRC_MISSION_SERVER_PRETTYNAME = 'Freenode'
+IRC_MISSION_CHANNEL = '#oh-ircmission-test'
+IRC_MISSIONBOT_NICK = 'oh_bottest'
+IRC_MISSIONBOT_REALNAME = 'OpenHatch Mission Bot'
+
+# the most recent git commit hash, included in the main page footer for bug
+# reporting/debugging
+try:
+    COMMIT_HASH = subprocess.Popen(['git', 'rev-parse', '--short', 'HEAD'],
+                              stdout=subprocess.PIPE).stdout.read().strip()
+except OSError: # git not found on system path
+    COMMIT_HASH = None

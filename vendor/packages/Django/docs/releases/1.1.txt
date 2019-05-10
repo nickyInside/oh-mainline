@@ -37,7 +37,7 @@ If you are using a 32-bit platform, you're off the hook; you'll observe no
 differences as a result of this change.
 
 However, **users on 64-bit platforms may experience some problems** using the
-:djadmin:`reset` management command. Prior to this change, 64-bit platforms
+``reset`` management command. Prior to this change, 64-bit platforms
 would generate a 64-bit, 16 character digest in the constraint name; for
 example::
 
@@ -48,14 +48,14 @@ Following this change, all platforms, regardless of word size, will generate a
 
     ALTER TABLE myapp_sometable ADD CONSTRAINT object_id_refs_id_32091d1e FOREIGN KEY ...
 
-As a result of this change, you will not be able to use the :djadmin:`reset`
+As a result of this change, you will not be able to use the ``reset``
 management command on any table made by a 64-bit machine. This is because the
 the new generated name will not match the historically generated name; as a
 result, the SQL constructed by the reset command will be invalid.
 
 If you need to reset an application that was created with 64-bit constraints,
 you will need to manually drop the old constraint prior to invoking
-:djadmin:`reset`.
+``reset``.
 
 Test cases are now run in a transaction
 ---------------------------------------
@@ -93,15 +93,15 @@ other than raise a ``DeprecationWarning``.
 
 If you've been relying on this middleware, the easiest upgrade path is:
 
-    * Examine `the code as it existed before it was removed`__.
+* Examine `the code as it existed before it was removed`__.
 
-    * Verify that it works correctly with your upstream proxy, modifying
-      it to support your particular proxy (if necessary).
+* Verify that it works correctly with your upstream proxy, modifying
+  it to support your particular proxy (if necessary).
 
-    * Introduce your modified version of ``SetRemoteAddrFromForwardedFor`` as a
-      piece of middleware in your own project.
+* Introduce your modified version of ``SetRemoteAddrFromForwardedFor`` as a
+  piece of middleware in your own project.
 
-__ http://code.djangoproject.com/browser/django/trunk/django/middleware/http.py?rev=11000#L33
+__ https://github.com/django/django/blob/91f18400cc0fb37659e2dbaab5484ff2081f1f30/django/middleware/http.py#L33
 
 Names of uploaded files are available later
 -------------------------------------------
@@ -120,9 +120,8 @@ has been saved.
 Changes to how model formsets are saved
 ---------------------------------------
 
-.. currentmodule:: django.forms.models
-
-In Django 1.1, :class:`BaseModelFormSet` now calls :meth:`ModelForm.save()`.
+In Django 1.1, :class:`~django.forms.models.BaseModelFormSet` now calls
+``ModelForm.save()``.
 
 This is backwards-incompatible if you were modifying ``self.initial`` in a model
 formset's ``__init__``, or if you relied on the internal ``_total_form_count``
@@ -132,7 +131,7 @@ public methods.
 Fixed the ``join`` filter's escaping behavior
 ---------------------------------------------
 
-The :ttag:`join` filter no longer escapes the literal value that is
+The :tfilter:`join` filter no longer escapes the literal value that is
 passed in for the connector.
 
 This is backwards incompatible for the special situation of the literal string
@@ -146,7 +145,7 @@ Permanent redirects and the ``redirect_to()`` generic view
 ----------------------------------------------------------
 
 Django 1.1 adds a ``permanent`` argument to the
-:func:`django.views.generic.simple.redirect_to()` view. This is technically
+``django.views.generic.simple.redirect_to()`` view. This is technically
 backwards-incompatible if you were using the ``redirect_to`` view with a
 format-string key called 'permanent', which is highly unlikely.
 
@@ -157,14 +156,14 @@ Features deprecated in 1.1
 
 One feature has been marked as deprecated in Django 1.1:
 
-    * You should no longer use ``AdminSite.root()`` to register that admin
-      views. That is, if your URLconf contains the line::
+* You should no longer use ``AdminSite.root()`` to register that admin
+  views. That is, if your URLconf contains the line::
 
-            (r'^admin/(.*)', admin.site.root),
+        (r'^admin/(.*)', admin.site.root),
 
-      You should change it to read::
+  You should change it to read::
 
-            (r'^admin/', include(admin.site.urls)),
+        (r'^admin/', include(admin.site.urls)),
 
 You should begin to remove use of this feature from your code immediately.
 
@@ -198,19 +197,21 @@ Aggregate support
 It's now possible to run SQL aggregate queries (i.e. ``COUNT()``, ``MAX()``,
 ``MIN()``, etc.) from within Django's ORM. You can choose to either return the
 results of the aggregate directly, or else annotate the objects in a
-:class:`QuerySet` with the results of the aggregate query.
+:class:`~django.db.models.query.QuerySet` with the results of the aggregate
+query.
 
-This feature is available as new :meth:`QuerySet.aggregate()`` and
-:meth:`QuerySet.annotate()`` methods, and is covered in detail in :doc:`the ORM
-aggregation documentation </topics/db/aggregation>`.
+This feature is available as new
+:meth:`~django.db.models.query.QuerySet.aggregate` and
+:meth:`~django.db.models.query.QuerySet.annotate` methods, and is covered in
+detail in :doc:`the ORM aggregation documentation </topics/db/aggregation>`.
 
 Query expressions
 ~~~~~~~~~~~~~~~~~
 
 Queries can now refer to a another field on the query and can traverse
 relationships to refer to fields on related models. This is implemented in the
-new :class:`F` object; for full details, including examples, consult the
-:ref:`documentation for F expressions <query-expressions>`.
+new :class:`~django.db.models.F` object; for full details, including examples,
+consult the :ref:`documentation for F expressions <query-expressions>`.
 
 Model improvements
 ------------------
@@ -223,7 +224,7 @@ A number of features have been added to Django's model layer:
 You can now control whether or not Django manages the life-cycle of the database
 tables for a model using the :attr:`~Options.managed` model option. This
 defaults to ``True``, meaning that Django will create the appropriate database
-tables in :djadmin:`syncdb` and remove them as part of the :djadmin:`reset`
+tables in :djadmin:`syncdb` and remove them as part of the ``reset``
 command. That is, Django *manages* the database table's lifecycle.
 
 If you set this to ``False``, however, no database table creating or deletion
@@ -257,21 +258,21 @@ particular fields, you can now tell Django not to retrieve them from the
 database.
 
 You'll do this with the new queryset methods
-:meth:`~django.db.models.QuerySet.defer` and
-:meth:`~django.db.models.QuerySet.only`.
+:meth:`~django.db.models.query.QuerySet.defer` and
+:meth:`~django.db.models.query.QuerySet.only`.
 
 Testing improvements
 --------------------
 
 A few notable improvements have been made to the :doc:`testing framework
-</topics/testing>`.
+</topics/testing/index>`.
 
 Test performance improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: django.test
 
-Tests written using Django's :doc:`testing framework </topics/testing>` now run
+Tests written using Django's :doc:`testing framework </topics/testing/index>` now run
 dramatically faster (as much as 10 times faster in many cases).
 
 This was accomplished through the introduction of transaction-based tests: when
@@ -289,15 +290,15 @@ Test client improvements
 A couple of small -- but highly useful -- improvements have been made to the
 test client:
 
-    * The test :class:`Client` now can automatically follow redirects with the
-      ``follow`` argument to :meth:`Client.get` and :meth:`Client.post`. This
-      makes testing views that issue redirects simpler.
+* The test :class:`Client` now can automatically follow redirects with the
+  ``follow`` argument to :meth:`Client.get` and :meth:`Client.post`. This
+  makes testing views that issue redirects simpler.
 
-    * It's now easier to get at the template context in the response returned
-      the test client: you'll simply access the context as
-      ``request.context[key]``. The old way, which treats ``request.context`` as
-      a list of contexts, one for each rendered template in the inheritance
-      chain, is still available if you need it.
+* It's now easier to get at the template context in the response returned
+  the test client: you'll simply access the context as
+  ``request.context[key]``. The old way, which treats ``request.context`` as
+  a list of contexts, one for each rendered template in the inheritance
+  chain, is still available if you need it.
 
 New admin features
 ------------------
@@ -352,21 +353,21 @@ GeoDjango
 In Django 1.1, GeoDjango_ (i.e. ``django.contrib.gis``) has several new
 features:
 
-    * Support for SpatiaLite_ -- a spatial database for SQLite -- as a spatial
-      backend.
+* Support for SpatiaLite_ -- a spatial database for SQLite -- as a spatial
+  backend.
 
-    * Geographic aggregates (``Collect``, ``Extent``, ``MakeLine``, ``Union``)
-      and ``F`` expressions.
+* Geographic aggregates (``Collect``, ``Extent``, ``MakeLine``, ``Union``)
+  and ``F`` expressions.
 
-    * New ``GeoQuerySet`` methods: ``collect``, ``geojson``, and
-      ``snap_to_grid``.
+* New ``GeoQuerySet`` methods: ``collect``, ``geojson``, and
+  ``snap_to_grid``.
 
-    * A new list interface methods for ``GEOSGeometry`` objects.
+* A new list interface methods for ``GEOSGeometry`` objects.
 
 For more details, see the `GeoDjango documentation`_.
 
 .. _geodjango: http://geodjango.org/
-.. _spatialite: http://www.gaia-gis.it/spatialite/
+.. _spatialite: http://www.gaia-gis.it/gaia-sins/
 .. _geodjango documentation: http://geodjango.org/docs/
 
 Other improvements
@@ -396,8 +397,8 @@ Other new features and changes introduced since Django 1.0 include:
   which return the list of hidden -- i.e., ``<input type="hidden">`` -- and
   visible fields on the form, respectively.
 
-* The ``redirect_to`` generic view (see :doc:`the generic views documentation
-  </ref/generic-views>`) now accepts an additional keyword argument
+* The ``redirect_to`` generic view
+  now accepts an additional keyword argument
   ``permanent``. If ``permanent`` is ``True``, the view will emit an HTTP
   permanent redirect (status code 301). If ``False``, the view will emit an HTTP
   temporary redirect (status code 302).
@@ -446,7 +447,7 @@ the weary! If you'd like to help, discussion of Django development, including
 progress toward the 1.2 release, takes place daily on the django-developers
 mailing list:
 
-    * http://groups.google.com/group/django-developers
+* http://groups.google.com/group/django-developers
 
 ... and in the ``#django-dev`` IRC channel on ``irc.freenode.net``. Feel free to
 join the discussions!
@@ -454,7 +455,7 @@ join the discussions!
 Django's online documentation also includes pointers on how to contribute to
 Django:
 
-    * :doc:`How to contribute to Django </internals/contributing>`
+* :doc:`How to contribute to Django </internals/contributing/index>`
 
 Contributions on any level -- developing code, writing documentation or simply
 triaging tickets and helping to test proposed bugfixes -- are always welcome and

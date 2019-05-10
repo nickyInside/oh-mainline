@@ -36,12 +36,11 @@ def uni_text(s):
 import mysite.customs.mechanize_helpers
 
 
-def ohloh_url2data(url, selector, params={}, many=False, API_KEY=None, person=None):
+def ohloh_url2data(url, selector, params={}, many=False, API_KEY=None):
     '''Input: A URL to get,
     a bunch of parameters to toss onto the end url-encoded,
     many (a boolean) indicating if we should return a list of just one datum,
-    API_KEY suggesting a key to use with Ohloh, and a
-    Person object to, if the request is slow, log messages to.
+    API_KEY suggesting a key to use with Ohloh.
 
     Output: A list/dictionary of Ohloh data plus a saved WebResponse instance that
     logs information about the request.'''
@@ -60,7 +59,7 @@ def ohloh_url2data(url, selector, params={}, many=False, API_KEY=None, person=No
     encoded = http.urlencode(params)
     url += encoded
     try:
-        b = mysite.customs.mechanize_helpers.mechanize_get(url, person)
+        b = mysite.customs.mechanize_helpers.mechanize_get(url)
         web_response = mysite.customs.models.WebResponse.create_from_browser(b)
         # Always save the WebResponse, even if we don't know
         web_response.save()
@@ -84,12 +83,12 @@ def ohloh_url2data(url, selector, params={}, many=False, API_KEY=None, person=No
     # Did Ohloh return an error?
     root = tree.getroot()
     if root.find('error') is not None:
-        raise ValueError, "Ohloh gave us back an error. Wonder why."
+        raise ValueError("Ohloh gave us back an error. Wonder why.")
 
     interestings = root.findall(selector)
     for interesting in interestings:
         this = {}
-        for child in interesting.getchildren():
+        for child in interesting:
             if child.text:
                 this[unicode(child.tag)] = uni_text(child.text)
         ret.append(this)

@@ -46,7 +46,10 @@
     padding-right: @padding;
     width: @parent-width - @padding * 2;
 }
-    
+
+@footer-height: 250px;
+@footer-padding: 40px;
+
 /* CSSTODO -- do we use these actually?*/
 .enormous {
     font-size: 3em;
@@ -83,8 +86,18 @@
 .centered { margin: 0 auto; }
 
 /* styles */
+html { 
+    position: relative; min-height: 100%;
+}
 
-body { font: @normal-size Tuffy, Helvetica, sans-serif; background: @lightest-grey url('/static/images/light-hatch.png') repeat; color: @default-text-color; width: 100%; .centered; padding: 0; }
+body {
+    font: @normal-size Tuffy, Helvetica, sans-serif;
+    background: @lightest-grey url('/static/images/light-hatch.png') repeat; color: @default-text-color;
+    width: 100%;
+    .centered;
+    padding: 0;
+    margin-bottom: @footer-height + @footer-padding;
+}
 
 code {
     overflow-x: auto;
@@ -127,7 +140,16 @@ abbr.foss { border: 0; font-variant: small-caps;}
 
 h1 a, h1 a:hover { text-decoration: none; }
 
-#container { width: @total-width; padding-bottom: 30px; .centered;}
+#container {
+    width: @total-width;
+    padding-bottom: 30px;
+    &::after {
+        content: ' ';
+        clear: both;
+        display: block;
+    }
+    .centered;
+}
 
 .module { 
     width: 100%; 
@@ -223,14 +245,20 @@ ul#links { margin-left: 20px; }
 
 #content { padding: 10px 0 30px 0; clear: both; .width-and-padding(@total-width, @standard-padding); }
 
-#footer-wrapper { width: 100%; clear: both; padding-top: 40px;}
+#footer-wrapper {
+    width: 100%;
+    clear: both;
+    padding-top: @footer-padding;
+    position: absolute;
+    bottom: 0;
+}
 
-#footer { 
-    width: 100%;  
-    bottom: 0; 
-    padding: 10px 0px; 
-    text-align: right; 
-    .centered; 
+#footer {
+    width: 100%;
+    height: @footer-height;
+    padding: 10px 0px;
+    text-align: right;
+    .centered;
     .nav-bg;
 
     ul { display: inline; list-style-type: none; max-width: 108em; padding: 0 20px; }
@@ -243,6 +271,10 @@ ul#links { margin-left: 20px; }
     }
     .column { width: 210px; display: inline-block; margin: 0px 5px; vertical-align: top; text-align: left; float: none; }
 
+}
+
+#training-missions {
+    width: 100%;
 }
 
 h3 { margin-bottom: 0px; text-align: left; clear: left; font-weight: normal; font-size: 1.1em; color: @default-text-color; letter-spacing: 0; margin: 0; }
@@ -294,6 +326,8 @@ img.right { float: right; padding: 0 0 @standard-padding 10px;}
 }
 .aka {
 }
+/* Columns in general float left, and have some margin-right to
+   create visual spacing. */
 .column {
     float: left;
     margin-right: 10px;
@@ -307,7 +341,7 @@ h4, .cute-header {
 }
 input[type='submit'] {
     color: @dark-grey;
-    float: right;
+    float: left;
 }
 
 #notifications {
@@ -427,4 +461,47 @@ body#people-map #search_engine_is_down_message { float: left; display: block; ma
 
 .module .link-without-style {
     color: inherit;
+}
+
+/* Add responsive design only for phones and tablets */
+@media (max-width: 800px) {
+  /* Based on observation, overwrite existing css styles */
+  #footer .threecol, body #container, body#missions_index .submodule,
+  body.one_column #main .submodule.skinny, body.one_column #main .submodule.fat,
+  .column, body#profile .project-display,
+  body#search #container #pagetop img#volunteer-opportunities,
+  /*  Overwrite selectors that call LESS mix-in width-and-padding */
+  #nav, #pagetop, #content {
+    width: 100%;
+  }
+  #footer .column {
+    width: 30%;
+  }
+}
+
+body#bugset_create textarea {
+    width: 98%;
+}
+
+body#bugset_create textarea, body#bugset_create input {
+    float: none;
+}
+
+body#bugset_create #button-container {
+    text-align: right;
+}
+
+body#bugset_create ul.errorlist li {
+    display: block;
+    float: none;
+    width: 97%;
+}
+
+body#bugset_create h1,
+body#search.bugsets h1,
+body#bugsets_main h1
+{
+    margin: 10px 0 0 10px;
+    font-weight: bold;
+    color: #222;
 }

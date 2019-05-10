@@ -1,10 +1,13 @@
-from django.contrib import admin
+from __future__ import absolute_import
+
 from django import forms
-from django.contrib.admin.validation import validate, validate_inline, \
-                                            ImproperlyConfigured
+from django.contrib import admin
+from django.contrib.admin.validation import validate, validate_inline
+from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
 
-from models import Song, Book, Album, TwoAlbumFKAndAnE, State, City
+from .models import Song, Book, Album, TwoAlbumFKAndAnE, State, City
+
 
 class SongForm(forms.ModelForm):
     pass
@@ -17,13 +20,19 @@ class InvalidFields(admin.ModelAdmin):
     form = SongForm
     fields = ['spam']
 
+class ValidFormFieldsets(admin.ModelAdmin):
+    def get_form(self, request, obj=None, **kwargs):
+        class ExtraFieldForm(SongForm):
+            name = forms.CharField(max_length=50)
+        return ExtraFieldForm
+
+    fieldsets = (
+        (None, {
+            'fields': ('name',),
+        }),
+    )
+
 class ValidationTestCase(TestCase):
-    def assertRaisesMessage(self, exc, msg, func, *args, **kwargs):
-        try:
-            func(*args, **kwargs)
-        except Exception, e:
-            self.assertEqual(msg, str(e))
-            self.assertTrue(isinstance(e, exc), "Expected %s, got %s" % (exc, type(e)))
 
     def test_readonly_and_editable(self):
         class SongAdmin(admin.ModelAdmin):
@@ -44,6 +53,14 @@ class ValidationTestCase(TestCase):
             "'InvalidFields.fields' refers to field 'spam' that is missing from the form.",
             validate,
             InvalidFields, Song)
+
+    def test_custom_get_form_with_fieldsets(self):
+        """
+        Ensure that the fieldsets validation is skipped when the ModelAdmin.get_form() method
+        is overridden.
+        Refs #19445.
+        """
+        validate(ValidFormFieldsets, Song)
 
     def test_exclude_values(self):
         """
@@ -92,9 +109,21 @@ class ValidationTestCase(TestCase):
             inlines = [SongInline]
 
         self.assertRaisesMessage(ImproperlyConfigured,
-            "SongInline cannot exclude the field 'album' - this is the foreign key to the parent model Album.",
+            "SongInline cannot exclude the field 'album' - this is the foreign key to the parent model admin_validation.Album.",
             validate,
             AlbumAdmin, Album)
+
+    def test_app_label_in_admin_validation(self):
+        """
+        Regression test for #15669 - Include app label in admin validation messages
+        """
+        class RawIdNonexistingAdmin(admin.ModelAdmin):
+            raw_id_fields = ('nonexisting',)
+
+        self.assertRaisesMessage(ImproperlyConfigured,
+            "'RawIdNonexistingAdmin.raw_id_fields' refers to field 'nonexisting' that is missing from model 'admin_validation.Album'.",
+            validate,
+            RawIdNonexistingAdmin, Album)
 
     def test_fk_exclusion(self):
         """
@@ -201,7 +230,7 @@ class ValidationTestCase(TestCase):
             validate,
             BookAdmin, Book)
 
-    def test_cannon_include_through(self):
+    def test_cannot_include_through(self):
         class FieldsetBookAdmin(admin.ModelAdmin):
             fieldsets = (
                 ('Header 1', {'fields': ('name',)}),
@@ -211,6 +240,11 @@ class ValidationTestCase(TestCase):
             "'FieldsetBookAdmin.fieldsets[1][1]['fields']' can't include the ManyToManyField field 'authors' because 'authors' manually specifies a 'through' model.",
             validate,
             FieldsetBookAdmin, Book)
+
+    def test_nested_fields(self):
+        class NestedFieldsAdmin(admin.ModelAdmin):
+           fields = ('price', ('name', 'subtitle'))
+        validate(NestedFieldsAdmin, Book)
 
     def test_nested_fieldsets(self):
         class NestedFieldsetAdmin(admin.ModelAdmin):
@@ -249,5 +283,21 @@ class ValidationTestCase(TestCase):
         class FieldsOnFormOnlyAdmin(admin.ModelAdmin):
             form = SongForm
             fields = ['title', 'extra_data']
+
+        validate(FieldsOnFormOnlyAdmin, Song)
+
+    def test_non_model_first_field(self):
+        """
+        Regression for ensuring ModelAdmin.field can handle first elem being a
+        non-model field (test fix for UnboundLocalError introduced with r16225).
+        """
+        class SongForm(forms.ModelForm):
+            extra_data = forms.CharField()
+            class Meta:
+                model = Song
+
+        class FieldsOnFormOnlyAdmin(admin.ModelAdmin):
+            form = SongForm
+            fields = ['extra_data', 'title']
 
         validate(FieldsOnFormOnlyAdmin, Song)

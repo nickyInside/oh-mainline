@@ -1,7 +1,7 @@
-from django.utils.unittest import TestCase
+from __future__ import absolute_import, unicode_literals
 
-from modeltests.validation import ValidationTestCase
-from models import *
+from . import ValidationTestCase
+from .models import ModelToValidate
 
 
 class TestModelsWithValidators(ValidationTestCase):
@@ -15,5 +15,5 @@ class TestModelsWithValidators(ValidationTestCase):
         self.assertFieldFailsValidationWithMessage(
             mtv.full_clean,
             'f_with_custom_validator',
-            [u'This is not the answer to life, universe and everything!']
+            ['This is not the answer to life, universe and everything!']
         )

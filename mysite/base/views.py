@@ -21,7 +21,7 @@
 
 from django.http import HttpResponse, HttpResponseBadRequest
 from mysite.base.view_helpers import render_response
-from django.utils import simplejson
+import json
 from django.template import loader, Context
 
 import mysite.account
@@ -35,19 +35,24 @@ import mysite.missions.models
 
 import random
 import datetime
+import logging
 
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def front_page_data():
     data = {}
     data['entries'] = mysite.customs.feed.cached_blog_entries()[:1]
     feed_items = list(
-        mysite.search.models.Answer.objects.order_by('-modified_date')[:5])
+        mysite.search.models.Answer.objects.order_by('-created_date')[:5])
     feed_items.extend(
-        mysite.search.models.WannaHelperNote.objects.order_by('-modified_date')[:5])
+        mysite.search.models.WannaHelperNote.objects.order_by('-created_date')[:5])
     feed_items.sort(key=lambda x: x.modified_date, reverse=True)
     data['recent_feed_items'] = feed_items[:5]
+    data['current_commit_hash'] = settings.COMMIT_HASH
     return data
 
 
@@ -61,7 +66,7 @@ def home(request):
     data['random_profiles'] = everybody[0:5]
 
     if request.user.is_authenticated():
-        template_path = 'base/landing.html'
+        template_path = 'base/index.html'
         # figure oout which nudges we want to show them
         person = request.user.get_profile()
 
@@ -70,22 +75,15 @@ def home(request):
         data['nudge_missions'] = not mysite.missions.models.StepCompletion.objects.filter(
             person=person)
 
-        # Project editor nudging. Note:
-        # If the person has some dias, then no nudge!
-        if person.dataimportattempt_set.all():
-            # whee, no nudge. the user has already seen the project editor.
-            pass
+
+        if person.get_published_portfolio_entries():
+            data['nudge_importer_when_user_has_some_projects'
+                 ] = True  # just nudge about the importer...
         else:
-            # So, either the person has some projects listed publicly, in which case,
-            # we should remind the person just to use the importer...
-            if person.get_published_portfolio_entries():
-                data['nudge_importer_when_user_has_some_projects'
-                     ] = True  # just nudge about the importer...
-            else:
-                # the person has entered zero projects and hasn't touched the importer
-                # so introduce him or her to use the importer!
-                data['nudge_importer_when_user_has_no_projects'
-                     ] = True  # give the general project editing nudge
+            # the person has entered zero projects and hasn't touched the importer
+            # so introduce him or her to use the importer!
+            data['nudge_importer_when_user_has_no_projects'
+                 ] = True  # give the general project editing nudge
 
         data['show_nudge_box'] = (data['nudge_location'] or
                                   'nudge_importer_when_user_has_no_projects' in data or data['nudge_tags'] or
@@ -113,7 +111,7 @@ def home(request):
             (not any([pfe.project.bug_set.all()
                       for pfe in person.get_published_portfolio_entries()])))
     else:  # no user logged in. Show front-page
-        template_path = 'base/landing.html'
+        template_path = 'base/index.html'
 
     return (request, template_path, data)
 
@@ -123,7 +121,7 @@ def page_to_js(request):
     # from django.template.loader import render_to_string
     # to generate html_doc
     html_doc = "<strong>zomg</strong>"
-    encoded_for_js = simplejson.dumps(html_doc)
+    encoded_for_js = json.dumps(html_doc)
     # Note: using application/javascript as suggested by
     # http://www.ietf.org/rfc/rfc4329.txt
     return render_response(request, 'base/append_ourselves.js',
@@ -159,25 +157,6 @@ def geocode(request):
 
 def meta_data():
     data = {}
-    data['dia_diagnostics'] = {}
-
-    # temp variable for shortness
-    my = data['dia_diagnostics']
-
-    my['Uncompleted DIAs'] = mysite.profile.models.DataImportAttempt.objects.filter(
-        completed=False).count()
-
-    one_minute_ago = (datetime.datetime.now() -
-                      datetime.timedelta(minutes=1))
-
-    my['Uncompleted DIAs older than 1 minute'] = mysite.profile.models.DataImportAttempt.objects.filter(
-        completed=False, date_created__lt=one_minute_ago).count()
-
-    five_minute_ago = (datetime.datetime.now() -
-                       datetime.timedelta(minutes=5))
-
-    my['Uncompleted DIAs older than 5 minutes'] = mysite.profile.models.DataImportAttempt.objects.filter(
-        completed=False, date_created__lt=one_minute_ago).count()
 
     data['bug_diagnostics'] = {}
     # local name for shortness
@@ -220,13 +199,13 @@ def meta_exit_code(data=None):
 
     # Exit codes and stdout for Nagios integration
     if bug2:
-        print "{0} - Polled 2+: {1} Polled 3+: {2} ({3}%)".format("CRITICAL", bug1, bug2, perbug)
+        logger.error("{0} - Polled 2+: {1} Polled 3+: {2} ({3}%)".format("CRITICAL", bug1, bug2, perbug))
         return 2
     elif bug1:
-        print "{0} - Polled 2+: {1} Polled 3+: {2} ({3}%)".format("WARNING", bug1, bug2, perbug)
+        logger.warning("{0} - Polled 2+: {1} Polled 3+: {2} ({3}%)".format("WARNING", bug1, bug2, perbug))
         return 1
     else:
-        print "{0} - Polled 2+: {1} Polled 3+: {2} ({3}%)".format("OK", bug1, bug2, perbug)
+        logger.info("{0} - Polled 2+: {1} Polled 3+: {2} ({3}%)".format("OK", bug1, bug2, perbug))
         return 0
 
 
@@ -296,3 +275,11 @@ def wordpress_index(request):
     template_path = 'base/wordpress_index.html'
     data = {}
     return (request, template_path, data)
+
+def render_robots_txt(request):
+    if settings.DEBUG:
+        template_path = "robots_for_dev_env.txt"
+    else:
+        template_path = "robots_for_live_site.txt"
+
+    return render_response(request, template_path, mimetype='text/plain')

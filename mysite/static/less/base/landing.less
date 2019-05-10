@@ -2,6 +2,13 @@
 
 body#landing {
 
+    /* The columns on the front page take up about one-third
+       of the width. Later rules for responding to browser
+       width changes will adjust these rules further. */
+    .column {
+        margin-left: -1px;
+        width:32%;
+    }
     #landing-module {
         background: @emphasized-module-interior;
         #landing-message {
@@ -25,6 +32,18 @@ body#landing {
         margin-right: 12px;
         font-size: 1.15em;
         .screw-you-webkit;
+    }
+
+    /* Add responsive design for phones and tablets,
+        so each box occupies its own row. */
+    @media (max-width: 800px) {
+      .submodule {
+        width: 100%;
+        margin-right: 0px;
+      }
+      .column.three-column {
+        width: 100%;
+      }
     }
 
     p {

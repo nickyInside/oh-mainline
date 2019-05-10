@@ -1,8 +1,11 @@
+from __future__ import absolute_import
+
 from django.db.models import signals
 from django.dispatch import receiver
 from django.test import TestCase
+from django.utils import six
 
-from models import Person, Car
+from .models import Person, Car
 
 
 # #8285: signals can be any callable
@@ -142,7 +145,7 @@ class SignalTests(TestCase):
             Person.objects.all(), [
                 "James Jones",
             ],
-            unicode
+            six.text_type
         )
 
         signals.post_delete.disconnect(post_delete_test)

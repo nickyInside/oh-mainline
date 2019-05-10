@@ -4,7 +4,7 @@ Django shortcut functions
 
 .. module:: django.shortcuts
    :synopsis:
-       Convenience shortcuts that spam multiple levels of Django's MVC stack.
+       Convenience shortcuts that span multiple levels of Django's MVC stack.
 
 .. index:: shortcuts
 
@@ -15,9 +15,7 @@ introduce controlled coupling for convenience's sake.
 ``render``
 ==========
 
-.. function:: render(request, template[, dictionary][, context_instance][, content_type][, status][, current_app])
-
-   .. versionadded:: 1.3
+.. function:: render(request, template_name[, dictionary][, context_instance][, content_type][, status][, current_app])
 
    Combines a given template with a given context dictionary and returns an
    :class:`~django.http.HttpResponse` object with that rendered text.
@@ -32,7 +30,7 @@ Required arguments
 ``request``
     The request object used to generate this response.
 
-``template``
+``template_name``
     The full name of a template to use or sequence of template names.
 
 Optional arguments
@@ -52,6 +50,9 @@ Optional arguments
     The MIME type to use for the resulting document. Defaults to the value of
     the :setting:`DEFAULT_CONTENT_TYPE` setting.
 
+    .. versionchanged:: 1.5
+        This parameter used to be called ``mimetype``.
+
 ``status``
     The status code for the response. Defaults to ``200``.
 
@@ -64,7 +65,7 @@ Example
 -------
 
 The following example renders the template ``myapp/index.html`` with the
-MIME type ``application/xhtml+xml``::
+MIME type :mimetype:`application/xhtml+xml`::
 
     from django.shortcuts import render
 
@@ -76,11 +77,11 @@ MIME type ``application/xhtml+xml``::
 This example is equivalent to::
 
     from django.http import HttpResponse
-    from django.template import Context, loader
+    from django.template import RequestContext, loader
 
     def my_view(request):
         # View code here...
-        t = loader.get_template('myapp/template.html')
+        t = loader.get_template('myapp/index.html')
         c = RequestContext(request, {'foo': 'bar'})
         return HttpResponse(t.render(c),
             content_type="application/xhtml+xml")
@@ -89,7 +90,7 @@ This example is equivalent to::
 ``render_to_response``
 ======================
 
-.. function:: render_to_response(template_name[, dictionary][, context_instance][, mimetype])
+.. function:: render_to_response(template_name[, dictionary][, context_instance][, content_type])
 
    Renders a given template with a given context dictionary and returns an
    :class:`~django.http.HttpResponse` object with that rendered text.
@@ -123,15 +124,19 @@ Optional arguments
                                   my_data_dictionary,
                                   context_instance=RequestContext(request))
 
-``mimetype``
+``content_type``
     The MIME type to use for the resulting document. Defaults to the value of
     the :setting:`DEFAULT_CONTENT_TYPE` setting.
+
+    .. versionchanged:: 1.5
+        This parameter used to be called ``mimetype``.
+
 
 Example
 -------
 
 The following example renders the template ``myapp/index.html`` with the
-MIME type ``application/xhtml+xml``::
+MIME type :mimetype:`application/xhtml+xml`::
 
     from django.shortcuts import render_to_response
 
@@ -147,10 +152,10 @@ This example is equivalent to::
 
     def my_view(request):
         # View code here...
-        t = loader.get_template('myapp/template.html')
+        t = loader.get_template('myapp/index.html')
         c = Context({'foo': 'bar'})
         return HttpResponse(t.render(c),
-            mimetype="application/xhtml+xml")
+            content_type="application/xhtml+xml")
 
 ``redirect``
 ============
@@ -162,12 +167,14 @@ This example is equivalent to::
 
    The arguments could be:
 
-       * A model: the model's `get_absolute_url()` function will be called.
+   * A model: the model's :meth:`~django.db.models.Model.get_absolute_url()`
+     function will be called.
 
-       * A view name, possibly with arguments: `urlresolvers.reverse()` will
-         be used to reverse-resolve the name.
+   * A view name, possibly with arguments: :func:`urlresolvers.reverse
+     <django.core.urlresolvers.reverse>` will be used to reverse-resolve the
+     name.
 
-       * A URL, which will be used as-is for the redirect location.
+   * A URL, which will be used as-is for the redirect location.
 
    By default issues a temporary redirect; pass ``permanent=True`` to issue a
    permanent redirect
@@ -177,34 +184,36 @@ Examples
 
 You can use the :func:`redirect` function in a number of ways.
 
-    1. By passing some object; that object's
-       :meth:`~django.db.models.Model.get_absolute_url` method will be called
-       to figure out the redirect URL::
+1. By passing some object; that object's
+   :meth:`~django.db.models.Model.get_absolute_url` method will be called
+   to figure out the redirect URL::
 
-            def my_view(request):
-                ...
-                object = MyModel.objects.get(...)
-                return redirect(object)
+        from django.shortcuts import redirect
 
-    2. By passing the name of a view and optionally some positional or
-       keyword arguments; the URL will be reverse resolved using the
-       :func:`~django.core.urlresolvers.reverse` method::
+        def my_view(request):
+            ...
+            object = MyModel.objects.get(...)
+            return redirect(object)
 
-            def my_view(request):
-                ...
-                return redirect('some-view-name', foo='bar')
+2. By passing the name of a view and optionally some positional or
+   keyword arguments; the URL will be reverse resolved using the
+   :func:`~django.core.urlresolvers.reverse` method::
 
-    3. By passing a hardcoded URL to redirect to::
+        def my_view(request):
+            ...
+            return redirect('some-view-name', foo='bar')
 
-            def my_view(request):
-                ...
-                return redirect('/some/url/')
+3. By passing a hardcoded URL to redirect to::
 
-       This also works with full URLs::
+        def my_view(request):
+            ...
+            return redirect('/some/url/')
 
-            def my_view(request):
-                ...
-                return redirect('http://example.com/')
+   This also works with full URLs::
+
+        def my_view(request):
+            ...
+            return redirect('http://example.com/')
 
 By default, :func:`redirect` returns a temporary redirect. All of the above
 forms accept a ``permanent`` argument; if set to ``True`` a permanent redirect
@@ -267,8 +276,8 @@ will be raised if more than one object is found.
 .. function:: get_list_or_404(klass, *args, **kwargs)
 
    Returns the result of :meth:`~django.db.models.query.QuerySet.filter()` on a
-   given model manager, raising :class:`~django.http.Http404` if the resulting
-   list is empty.
+   given model manager cast to a list, raising :class:`~django.http.Http404` if
+   the resulting list is empty.
 
 Required arguments
 ------------------

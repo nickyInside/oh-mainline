@@ -1,21 +1,22 @@
+from __future__ import absolute_import
+
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.core.urlresolvers import reverse
+from django.core.urlresolvers import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import generic
 
-from regressiontests.generic_views.models import Artist, Author, Book, Page
-from regressiontests.generic_views.forms import AuthorForm
+from .forms import AuthorForm, ContactForm
+from .models import Artist, Author, Book, Page, BookSigning
 
 
 class CustomTemplateView(generic.TemplateView):
     template_name = 'generic_views/about.html'
 
     def get_context_data(self, **kwargs):
-        return {
-            'params': kwargs,
-            'key': 'value'
-        }
+        context = super(CustomTemplateView, self).get_context_data(**kwargs)
+        context.update({'key': 'value'})
+        return context
 
 
 class ObjectDetail(generic.DetailView):
@@ -42,7 +43,7 @@ class DictList(generic.ListView):
     """A ListView that doesn't use a model."""
     queryset = [
         {'first': 'John', 'last': 'Lennon'},
-        {'last': 'Yoko',  'last': 'Ono'}
+        {'first': 'Yoko',  'last': 'Ono'}
     ]
     template_name = 'generic_views/list.html'
 
@@ -65,7 +66,7 @@ class CustomPaginator(Paginator):
             allow_empty_first_page=allow_empty_first_page)
 
 class AuthorListCustomPaginator(AuthorList):
-    paginate_by = 5;
+    paginate_by = 5
 
     def get_paginator(self, queryset, page_size, orphans=0, allow_empty_first_page=True):
         return super(AuthorListCustomPaginator, self).get_paginator(
@@ -73,6 +74,13 @@ class AuthorListCustomPaginator(AuthorList):
             page_size,
             orphans=2,
             allow_empty_first_page=allow_empty_first_page)
+
+
+class ContactView(generic.FormView):
+    form_class = ContactForm
+    success_url = reverse_lazy('authors_list')
+    template_name = 'generic_views/form.html'
+
 
 class ArtistCreate(generic.CreateView):
     model = Artist
@@ -177,3 +185,66 @@ class BookDetail(BookConfig, generic.DateDetailView):
 class AuthorGetQuerySetFormView(generic.edit.ModelFormMixin):
     def get_queryset(self):
         return Author.objects.all()
+
+class BookDetailGetObjectCustomQueryset(BookDetail):
+    def get_object(self, queryset=None):
+        return super(BookDetailGetObjectCustomQueryset,self).get_object(
+            queryset=Book.objects.filter(pk=2))
+
+class CustomContextView(generic.detail.SingleObjectMixin, generic.View):
+    model = Book
+    object = Book(name='dummy')
+
+    def get_object(self):
+        return Book(name="dummy")
+
+    def get_context_data(self, **kwargs):
+        context = {'custom_key': 'custom_value'}
+        context.update(kwargs)
+        return super(CustomContextView, self).get_context_data(**context)
+
+    def get_context_object_name(self, obj):
+        return "test_name"
+
+class BookSigningConfig(object):
+    model = BookSigning
+    date_field = 'event_date'
+    # use the same templates as for books
+    def get_template_names(self):
+        return ['generic_views/book%s.html' % self.template_name_suffix]
+
+class BookSigningArchive(BookSigningConfig, generic.ArchiveIndexView):
+    pass
+
+class BookSigningYearArchive(BookSigningConfig, generic.YearArchiveView):
+    pass
+
+class BookSigningMonthArchive(BookSigningConfig, generic.MonthArchiveView):
+    pass
+
+class BookSigningWeekArchive(BookSigningConfig, generic.WeekArchiveView):
+    pass
+
+class BookSigningDayArchive(BookSigningConfig, generic.DayArchiveView):
+    pass
+
+class BookSigningTodayArchive(BookSigningConfig, generic.TodayArchiveView):
+    pass
+
+class BookSigningDetail(BookSigningConfig, generic.DateDetailView):
+    context_object_name = 'book'
+
+
+class NonModel(object):
+    id = "non_model_1"
+
+    _meta = None
+
+
+class NonModelDetail(generic.DetailView):
+
+    template_name = 'generic_views/detail.html'
+    model = NonModel
+
+    def get_object(self, queryset=None):
+        return NonModel()

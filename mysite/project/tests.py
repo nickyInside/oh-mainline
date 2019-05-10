@@ -15,7 +15,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from mysite.base.tests import TwillTests
+from django.test.client import Client
+from django_webtest import WebTest
+
 import mysite.project.view_helpers
 import mysite.account.tests
 
@@ -27,18 +29,25 @@ import mysite.profile.views
 import mysite.profile.models
 import mysite.profile.view_helpers
 
-from mysite.base.tests import better_make_twill_url
-
 import mock
 import urlparse
 import datetime
 
 from django.core.urlresolvers import reverse
 
-from twill import commands as tc
+class BasicHelpers(WebTest):
+    def login_with_client(self,
+                          username='paulproteus',
+                          password="paulproteus's unbreakable password"):
+        client = Client()
+        success = client.login(username=username, password=password)
+        self.assertTrue(success)
+        return client
 
+    def login_with_client_as_barry(self):
+        return self.login_with_client(username='barry', password='parallelism')
 
-class ProjectNameSearch(TwillTests):
+class ProjectNameSearch(WebTest):
 
     def test_search_for_similar_project_names_backend(self):
         # Create one relevant, one irrelevant project
@@ -46,26 +55,27 @@ class ProjectNameSearch(TwillTests):
         mysite.search.models.Project.create_dummy(name='Irrelevant')
 
         # Call out function, hoping to find Twisted System
-        starts_with_twisted = mysite.project.view_helpers.similar_project_names(
-            'Twisted')
+        starts_with_twisted = (
+            mysite.project.view_helpers.similar_project_names('Twisted'))
         self.assertEqual(['Twisted System'],
                          [p.name for p in starts_with_twisted])
 
         # Same with lowercase name
-        starts_with_twisted = mysite.project.view_helpers.similar_project_names(
-            'twistEd')
+        starts_with_twisted = (
+            mysite.project.view_helpers.similar_project_names('twistEd'))
         self.assertEqual(['Twisted System'],
                          [p.name for p in starts_with_twisted])
 
     def test_search_for_one_matching_project_name(self):
-        # If there's an exactly-matching project name, we redirect to that project's page
-        # (instead of showing search results).
+        # If there's an exactly-matching project name, we redirect to that
+        # project's page (instead of showing search results).
         mysite.search.models.Project.create_dummy(name='Twisted System')
         response = self.client.get('/projects/',
                                    {'q': 'twiSted SysTem'},
                                    follow=True)
-        self.assertEqual(response.redirect_chain,
-                         [('http://testserver/projects/Twisted%20System', 302)])
+        self.assertEqual(
+            response.redirect_chain,
+            [('http://testserver/projects/Twisted%20System', 302)])
 
     def test_form_sends_data_to_get(self):
         # This test will fail if a query that selects one project but doesn't
@@ -74,42 +84,34 @@ class ProjectNameSearch(TwillTests):
         # First, create the project that we will refer to below.
         mysite.search.models.Project.create_dummy(name='Twisted System')
 
-        tc.go(better_make_twill_url('http://openhatch.org/projects'))
-        query = 'Twisted'
-        tc.fv(1, 'search_q', query)
-        tc.submit()
-        tc.url('\?q=Twisted')  # Assert that URL contains this substring.
-        tc.find(query)
+        # Test the logout feature by inspecting Django's client session. Log in first before you test the log out feature.
+        self.client = Client()
+        username = 'paulproteus'
+        password = "paulproteus's unbreakable password"
+        self.client.login(username=username, password=password)
+
+        # Test that the links are expectedly present or expectedly absent by using django web-test. Log in first before you test the log out feature.
+        search_page = self.app.get('/projects/')
+        search_form = search_page.form
+        search_form['q'] = 'Twisted'
+        response = search_form.submit()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Twisted', response.content)
 
     def test_template_get_matching_projects(self):
         mysite.search.models.Project.create_dummy(name='Twisted System')
-        mysite.search.models.Project.create_dummy(name='Twisted Orange Drinks')
-        response = self.client.get('/projects/',
-                                   {'q': 'Twisted'},
-                                   follow=True)
+        mysite.search.models.Project.create_dummy(name='Twisted Vines')
+        response = self.client.get('/projects/?q=Twist')
         matching_projects = response.context[0]['matching_projects']
         self.assertEqual(
             sorted([p.name for p in matching_projects]),
-            sorted(['Twisted Orange Drinks', 'Twisted System']))
+            sorted(['Twisted System', 'Twisted Vines']))
 
 
-class ProjectList(TwillTests):
+class ProjectList(WebTest):
 
     def test_it_generally_works(self):
         self.client.get('/projects/')
-
-    def test_plus_projects_redirects_to_projects(self):
-        response = self.client.get("/+projects/")
-        self.assertEqual(response.status_code, 301)
-        parsed = urlparse.urlparse(response['location'])
-        self.assertEqual('/projects/', parsed.path)
-
-    def test_plus_projects_for_specific_project(self):
-        mysite.search.models.Project.create_dummy(name='sample')
-        response = self.client.get("/+projects/sample")
-        self.assertEqual(response.status_code, 301)
-        parsed = urlparse.urlparse(response['location'])
-        self.assertEqual('/projects/sample', parsed.path)
 
     def test_space_projects_redirects_to_projects(self):
         response = self.client.get("/ projects/")
@@ -120,12 +122,10 @@ class ProjectList(TwillTests):
         self.assertEqual(response.status_code, 200)
 
 
-class ProjectPageCreation(TwillTests):
+class ProjectPageCreation(BasicHelpers):
     fixtures = ['user-paulproteus', 'person-paulproteus']
 
-    @mock.patch('mysite.search.models.Project.populate_icon_from_ohloh')
-    @mock.patch('mysite.search.tasks.PopulateProjectLanguageFromOhloh')
-    def test_post_handler(self, mock_populate_icon, mock_populate_language):
+    def test_post_handler(self):
         # Show that it works
         project_name = 'Something novel'
         self.assertFalse(
@@ -141,17 +141,15 @@ class ProjectPageCreation(TwillTests):
             mysite.search.models.Project.objects.filter(name=project_name))
 
         #  and redirected to the editor.
-        self.assertEqual(response.redirect_chain,
-                         [('http://testserver/+projedit/Something%20novel', 302)])
+        self.assertEqual(
+            response.redirect_chain,
+            [('http://testserver/+projedit/Something%20novel', 302)])
 
-        # FIXME: Enqueue a job into the session to have this user take ownership
+        # FIXME: Enqueue a job into session to have this user take ownership
         # of this Project.
         # This could easily be a log for edits.
 
-    @mock.patch('mysite.search.models.Project.populate_icon_from_ohloh')
-    @mock.patch('mysite.search.tasks.PopulateProjectLanguageFromOhloh')
-    def test_project_creator_simply_redirects_to_project_if_it_exists(
-            self, mock_populate_icon, mock_populate_language):
+    def test_project_creator_simply_redirects_to_project_if_it_exists(self):
         # Show that it works
         project_name = 'Something novel'
         Project.create_dummy(name=project_name.lower())
@@ -168,23 +166,12 @@ class ProjectPageCreation(TwillTests):
         self.assertEqual(1, len(mysite.search.models.Project.objects.all()))
 
         #  and redirected.
-        self.assertEqual(response.redirect_chain,
-                         [('http://testserver/projects/something%20novel', 302)])
-
-    def test_form_on_project_search_page_submits_to_project_creation_post_handler(self):
-        project_search_page_url = better_make_twill_url(
-            "http://openhatch.org%s?q=newproject" % reverse(mysite.project.views.projects))
-        tc.go(project_search_page_url)
-        # Fill form out with slightly different project name, which we
-        # anticipate happening sometimes
-        tc.fv('create_project', 'project_name', 'NewProject')
-        tc.submit()
-        post_handler_url = reverse(mysite.project.views.create_project_page_do)
-        import re
-        tc.url(re.escape(post_handler_url))
+        self.assertEqual(
+            response.redirect_chain,
+            [('http://testserver/projects/something%20novel', 302)])
 
 
-class ButtonClickMarksSomeoneAsWannaHelp(TwillTests):
+class ButtonClickMarksSomeoneAsWannaHelp(BasicHelpers):
     fixtures = ['user-paulproteus', 'person-paulproteus']
 
     def test_mark_as_wanna_help(self):
@@ -249,7 +236,7 @@ class ButtonClickMarksSomeoneAsWannaHelp(TwillTests):
         self.assertTrue(whn_after.contacted_by, datetime.date.today())
 
 
-class WannaHelpSubmitHandlesNoProjectIdGracefully(TwillTests):
+class WannaHelpSubmitHandlesNoProjectIdGracefully(WebTest):
 
     def test(self):
         # Submit nothing.
@@ -258,7 +245,7 @@ class WannaHelpSubmitHandlesNoProjectIdGracefully(TwillTests):
         self.assertEqual(response.status_code, 400)
 
 
-class WannaHelpWorksAnonymously(TwillTests):
+class WannaHelpWorksAnonymously(WebTest):
     fixtures = ['user-paulproteus', 'person-paulproteus']
 
     def test_mark_as_helper_anonymously(self):
@@ -280,8 +267,10 @@ class WannaHelpWorksAnonymously(TwillTests):
             post_to, {u'project': unicode(project_id)}, follow=True)
 
         # Make sure we are redirected to the right place
-        self.assertEqual(response.redirect_chain,
-                         [('http://testserver/account/login/?next=%2Fprojects%2FMyproject%3Fwanna_help%3Dtrue', 302)])
+        self.assertEqual(
+            response.redirect_chain,
+            [('http://testserver/account/login/?'
+              'next=%2Fprojects%2FMyproject%3Fwanna_help%3Dtrue', 302)])
 
         # check that the session can detect that we want to help Ubuntu out
         self.assertEqual(self.client.session['projects_we_want_to_help_out'],
@@ -292,8 +281,9 @@ class WannaHelpWorksAnonymously(TwillTests):
                          .people_who_wanna_help.all())
 
         # But when the user is logged in and *then* visits the project page
-        login_worked = self.client.login(username='paulproteus',
-                                         password="paulproteus's unbreakable password")
+        login_worked = self.client.login(
+            username='paulproteus',
+            password="paulproteus's unbreakable password")
         self.assert_(login_worked)
 
         # Visit the project page...
@@ -321,7 +311,7 @@ class WannaHelpWorksAnonymously(TwillTests):
         self.assertFalse(mysite.search.models.WannaHelperNote.objects.all())
 
 
-class ProjectPageTellsNextStepsForHelpersToBeExpanded(TwillTests):
+class ProjectPageTellsNextStepsForHelpersToBeExpanded(BasicHelpers):
     fixtures = ['user-paulproteus', 'person-paulproteus',
                 'miro-project']
 
@@ -332,14 +322,15 @@ class ProjectPageTellsNextStepsForHelpersToBeExpanded(TwillTests):
             'expand_next_steps', None))
 
 
-class OffsiteAnonymousWannaHelpWorks(TwillTests):
+class OffsiteAnonymousWannaHelpWorks(WebTest):
     fixtures = ['user-paulproteus', 'person-paulproteus']
 
     def test(self):
         # Steps for this test
-        # 1. User POSTs to the wannahelp POST handler, indicating the request came from offsite
+        # 1. User POSTs to the wannahelp POST handler, indicating the request
+        #    came from offsite
         # 2. User is redirected to a login page that knows the request came
-        # from offsite
+        #    from offsite
         project_id = Project.create_dummy(name='Myproject').id
 
         # At the start, no one wants to help our project.
@@ -360,15 +351,18 @@ class OffsiteAnonymousWannaHelpWorks(TwillTests):
         # destroy the session and then go back to the Referring page.
 
         # Make sure we are redirected to the right place
-        self.assertEqual(response.redirect_chain,
-                         [('http://testserver/account/login/?next=%2Fprojects%2FMyproject%3Fwanna_help%3Dtrue', 302)])
+        self.assertEqual(
+            response.redirect_chain,
+            [('http://testserver/account/login/?'
+              'next=%2Fprojects%2FMyproject%3Fwanna_help%3Dtrue', 302)])
 
-        lucky_projects = mysite.project.view_helpers.get_wanna_help_queue_from_session(
-            self.client.session)
+        lucky_projects = (mysite.project.view_helpers.
+                          get_wanna_help_queue_from_session(self.client.
+                                                            session))
         self.assertEqual([k.name for k in lucky_projects], ['Myproject'])
 
 
-class DecideWhichProjectDescriptionsAppearOnProjectPage(TwillTests):
+class DecideWhichProjectDescriptionsAppearOnProjectPage(BasicHelpers):
     fixtures = ['user-paulproteus', 'person-paulproteus',
                 'user-barry', 'person-barry']
 
@@ -387,7 +381,7 @@ class DecideWhichProjectDescriptionsAppearOnProjectPage(TwillTests):
         pfes = {'uncheck_me': create_pfe_with_description('paulproteus'),
                 'keep_me_checked': create_pfe_with_description('barry')}
 
-        # Get a list of the PortfolioEntries that we use to get a random project
+        # Get a list of PortfolioEntries that we use to get a random project
         # description for the project page.
         descriptions = project.get_pfentries_with_usable_descriptions()
 
@@ -395,12 +389,14 @@ class DecideWhichProjectDescriptionsAppearOnProjectPage(TwillTests):
         for entry in pfes.values():
             self.assert_(entry in descriptions)
 
-        self.login_with_twill()
+        # Log in as paulproteus
+        username = 'paulproteus'
+        self.login_with_client()
 
         # Go to the project page.
         url = urlparse.urljoin(
             "http://openhatch.org", project.get_edit_page_url())
-        tc.go(better_make_twill_url(url))
+        edit_page = self.app.get(url, user=username)
 
         # In preparation for the next set of assertions, make sure that the
         # entries don't have the same description.
@@ -408,18 +404,21 @@ class DecideWhichProjectDescriptionsAppearOnProjectPage(TwillTests):
             pfes['uncheck_me'].project_description,
             pfes['keep_me_checked'].project_description)
 
-        # See a list of project descriptions on the page, which equals the list of
-        # descriptions in the DB.
-        for entry in pfes.values():
-            tc.find(entry.project_description)
+        # See a list of project descriptions on the page, which equals the
+        # list of descriptions in the DB.
+        # for entry in pfes.values():
+            # tc.find(entry.project_description)
 
         # Uncheck one of the checkboxes and submit the form
-        name_of_checkbox_to_uncheck = "%s-use_my_description" % pfes['uncheck_me'].pk
-        tc.fv("2", name_of_checkbox_to_uncheck, False)
-        tc.submit()
+        name_of_checkbox_to_uncheck = "%s-use_my_description" % pfes[
+            'uncheck_me'].pk
+        # We have to know that the correct form is the 2nd item
+        edit_form = edit_page.forms[1]
+        edit_form[name_of_checkbox_to_uncheck] = False
+        edit_form.submit()
 
-        # Get a list of the PortfolioEntries that we use to get a random project
-        # description for the project page.
+        # Get a list of the PortfolioEntries that we use to get a random
+        # project description for the project page.
         good_pfentries = project.get_pfentries_with_usable_descriptions()
 
         # Observe that the list contains only the checked PortfolioEntry.
@@ -427,7 +426,7 @@ class DecideWhichProjectDescriptionsAppearOnProjectPage(TwillTests):
         self.assert_(pfes['keep_me_checked'] in good_pfentries)
 
 
-class BugTrackersOnProjectEditPage(TwillTests):
+class BugTrackersOnProjectEditPage(WebTest):
     fixtures = ['user-paulproteus', 'person-paulproteus',
                 'user-barry', 'person-barry']
 

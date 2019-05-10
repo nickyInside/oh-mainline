@@ -18,8 +18,8 @@ automatically-generated admin site.
     displayed on the public site. Django solves the problem of creating a
     unified interface for site administrators to edit content.
 
-    The admin isn't necessarily intended to be used by site visitors; it's for
-    site managers.
+    The admin isn't intended to be used by site visitors. It's for site
+    managers.
 
 Activate the admin site
 =======================
@@ -27,38 +27,38 @@ Activate the admin site
 The Django admin site is not activated by default -- it's an opt-in thing. To
 activate the admin site for your installation, do these three things:
 
-    * Add ``"django.contrib.admin"`` to your :setting:`INSTALLED_APPS` setting.
+* Uncomment ``"django.contrib.admin"`` in the :setting:`INSTALLED_APPS` setting.
 
-    * Run ``python manage.py syncdb``. Since you have added a new application
-      to :setting:`INSTALLED_APPS`, the database tables need to be updated.
+* Run ``python manage.py syncdb``. Since you have added a new application
+  to :setting:`INSTALLED_APPS`, the database tables need to be updated.
 
-    * Edit your ``mysite/urls.py`` file and uncomment the lines that reference
-      the admin -- there are three lines in total to uncomment. This file is a
-      URLconf; we'll dig into URLconfs in the next tutorial. For now, all you
-      need to know is that it maps URL roots to applications. In the end, you
-      should have a ``urls.py`` file that looks like this:
+* Edit your ``mysite/urls.py`` file and uncomment the lines that reference
+  the admin -- there are three lines in total to uncomment. This file is a
+  URLconf; we'll dig into URLconfs in the next tutorial. For now, all you
+  need to know is that it maps URL roots to applications. In the end, you
+  should have a ``urls.py`` file that looks like this:
 
-      .. parsed-literal::
+  .. parsed-literal::
 
-          from django.conf.urls.defaults import patterns, include, url
+      from django.conf.urls import patterns, include, url
 
-          # Uncomment the next two lines to enable the admin:
-          **from django.contrib import admin**
-          **admin.autodiscover()**
+      # Uncomment the next two lines to enable the admin:
+      **from django.contrib import admin**
+      **admin.autodiscover()**
 
-          urlpatterns = patterns('',
-              # Examples:
-              # url(r'^$', 'mysite.views.home', name='home'),
-              # url(r'^mysite/', include('mysite.foo.urls')),
+      urlpatterns = patterns('',
+          # Examples:
+          # url(r'^$', '{{ project_name }}.views.home', name='home'),
+          # url(r'^{{ project_name }}/', include('{{ project_name }}.foo.urls')),
 
-              # Uncomment the admin/doc line below to enable admin documentation:
-              # url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
+          # Uncomment the admin/doc line below to enable admin documentation:
+          # url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
 
-              # Uncomment the next line to enable the admin:
-              **url(r'^admin/', include(admin.site.urls)),**
-          )
+          # Uncomment the next line to enable the admin:
+          **url(r'^admin/', include(admin.site.urls)),**
+      )
 
-      (The bold lines are the ones that needed to be uncommented.)
+  (The bold lines are the ones that needed to be uncommented.)
 
 Start the development server
 ============================
@@ -77,6 +77,19 @@ http://127.0.0.1:8000/admin/. You should see the admin's login screen:
 .. image:: _images/admin01.png
    :alt: Django admin login screen
 
+.. admonition:: Doesn't match what you see?
+
+    If at this point, instead of the above login page, you get an error
+    page reporting something like::
+
+        ImportError at /admin/
+        cannot import name patterns
+        ...
+
+    then you're probably using a version of Django that doesn't match this
+    tutorial version. You'll want to either switch to the older tutorial or the
+    newer Django version.
+
 Enter the admin site
 ====================
 
@@ -88,7 +101,7 @@ the Django admin index page:
 .. image:: _images/admin02t.png
    :alt: Django admin index page
 
-You should see a few other types of editable content, including groups, users
+You should see a few types of editable content, including groups, users
 and sites. These are core features Django ships with by default.
 
 Make the poll app modifiable in the admin
@@ -96,12 +109,12 @@ Make the poll app modifiable in the admin
 
 But where's our poll app? It's not displayed on the admin index page.
 
-Just one thing to do: We need to tell the admin that ``Poll``
+Just one thing to do: we need to tell the admin that ``Poll``
 objects have an admin interface. To do this, create a file called
-``admin.py`` in your ``polls`` directory, and edit it to look like this::
+:file:`admin.py` in your ``polls`` directory, and edit it to look like this::
 
-    from polls.models import Poll
     from django.contrib import admin
+    from polls.models import Poll
 
     admin.site.register(Poll)
 
@@ -132,29 +145,34 @@ Click the "What's up?" poll to edit it:
 
 Things to note here:
 
-    * The form is automatically generated from the Poll model.
+* The form is automatically generated from the Poll model.
 
-    * The different model field types (:class:`~django.db.models.DateTimeField`,
-      :class:`~django.db.models.CharField`) correspond to the appropriate HTML
-      input widget. Each type of field knows how to display itself in the Django
-      admin.
+* The different model field types (:class:`~django.db.models.DateTimeField`,
+  :class:`~django.db.models.CharField`) correspond to the appropriate HTML
+  input widget. Each type of field knows how to display itself in the Django
+  admin.
 
-    * Each :class:`~django.db.models.DateTimeField` gets free JavaScript
-      shortcuts. Dates get a "Today" shortcut and calendar popup, and times get
-      a "Now" shortcut and a convenient popup that lists commonly entered times.
+* Each :class:`~django.db.models.DateTimeField` gets free JavaScript
+  shortcuts. Dates get a "Today" shortcut and calendar popup, and times get
+  a "Now" shortcut and a convenient popup that lists commonly entered times.
 
 The bottom part of the page gives you a couple of options:
 
-    * Save -- Saves changes and returns to the change-list page for this type of
-      object.
+* Save -- Saves changes and returns to the change-list page for this type of
+  object.
 
-    * Save and continue editing -- Saves changes and reloads the admin page for
-      this object.
+* Save and continue editing -- Saves changes and reloads the admin page for
+  this object.
 
-    * Save and add another -- Saves changes and loads a new, blank form for this
-      type of object.
+* Save and add another -- Saves changes and loads a new, blank form for this
+  type of object.
 
-    * Delete -- Displays a delete confirmation page.
+* Delete -- Displays a delete confirmation page.
+
+If the value of "Date published" doesn't match the time when you created the
+poll in Tutorial 1, it probably means you forgot to set the correct value for
+the :setting:`TIME_ZONE` setting. Change it, reload the page and check that
+the correct value appears.
 
 Change the "Date published" by clicking the "Today" and "Now" shortcuts. Then
 click "Save and continue editing." Then click "History" in the upper right.
@@ -258,12 +276,15 @@ in that window and click "Save," Django will save the poll to the database and
 dynamically add it as the selected choice on the "Add choice" form you're
 looking at.
 
-But, really, this is an inefficient way of adding Choice objects to the system.
+But, really, this is an inefficient way of adding ``Choice`` objects to the system.
 It'd be better if you could add a bunch of Choices directly when you create the
-Poll object. Let's make that happen.
+``Poll`` object. Let's make that happen.
 
-Remove the ``register()`` call for the Choice model. Then, edit the ``Poll``
+Remove the ``register()`` call for the ``Choice`` model. Then, edit the ``Poll``
 registration code to read::
+
+    from django.contrib import admin
+    from polls.models import Choice, Poll
 
     class ChoiceInline(admin.StackedInline):
         model = Choice
@@ -278,7 +299,7 @@ registration code to read::
 
     admin.site.register(Poll, PollAdmin)
 
-This tells Django: "Choice objects are edited on the Poll admin page. By
+This tells Django: "``Choice`` objects are edited on the ``Poll`` admin page. By
 default, provide enough fields for 3 choices."
 
 Load the "Add poll" page to see how that looks, you may need to restart your development server:
@@ -290,8 +311,16 @@ It works like this: There are three slots for related Choices -- as specified
 by ``extra`` -- and each time you come back to the "Change" page for an
 already-created object, you get another three extra slots.
 
+At the end of the three current slots you will find an "Add another Choice"
+link.  If you click on it, a new slot will be added. If you want to remove the
+added slot, you can click on the X to the top right of the added slot. Note
+that you can't remove the original three slots. This image shows an added slot:
+
+.. image:: _images/admin15t.png
+   :alt: Additional slot added dynamically
+
 One small problem, though. It takes a lot of screen space to display all the
-fields for entering related Choice objects. For that reason, Django offers a
+fields for entering related ``Choice`` objects. For that reason, Django offers a
 tabular way of displaying inline related objects; you just need to change
 the ``ChoiceInline`` declaration to read::
 
@@ -301,8 +330,11 @@ the ``ChoiceInline`` declaration to read::
 With that ``TabularInline`` (instead of ``StackedInline``), the
 related objects are displayed in a more compact, table-based format:
 
-.. image:: _images/admin12.png
+.. image:: _images/admin12t.png
    :alt: Add poll page now has more compact choices
+
+Note that there is an extra "Delete?" column that allows removing rows added
+using the "Add Another Choice" button and rows that have already been saved.
 
 Customize the admin change list
 ===============================
@@ -324,12 +356,12 @@ columns, on the change list page for the object::
         # ...
         list_display = ('question', 'pub_date')
 
-Just for good measure, let's also include the ``was_published_today`` custom
+Just for good measure, let's also include the ``was_published_recently`` custom
 method from Tutorial 1::
 
     class PollAdmin(admin.ModelAdmin):
         # ...
-        list_display = ('question', 'pub_date', 'was_published_today')
+        list_display = ('question', 'pub_date', 'was_published_recently')
 
 Now the poll change list page looks like this:
 
@@ -337,20 +369,25 @@ Now the poll change list page looks like this:
    :alt: Polls change list page, updated
 
 You can click on the column headers to sort by those values -- except in the
-case of the ``was_published_today`` header, because sorting by the output of
-an arbitrary method is not supported. Also note that the column header for
-``was_published_today`` is, by default, the name of the method (with
-underscores replaced with spaces). But you can change that by giving that
-method (in ``models.py``) a ``short_description`` attribute::
+case of the ``was_published_recently`` header, because sorting by the output
+of an arbitrary method is not supported. Also note that the column header for
+``was_published_recently`` is, by default, the name of the method (with
+underscores replaced with spaces), and that each line contains the string
+representation of the output.
+
+You can improve that by giving that method (in :file:`polls/models.py`) a few
+attributes, as follows::
 
     class Poll(models.Model):
         # ...
-        def was_published_today(self):
-            return self.pub_date.date() == datetime.date.today()
-        was_published_today.short_description = 'Published today?'
+        def was_published_recently(self):
+            return self.pub_date >= timezone.now() - datetime.timedelta(days=1)
+        was_published_recently.admin_order_field = 'pub_date'
+        was_published_recently.boolean = True
+        was_published_recently.short_description = 'Published recently?'
 
-Edit your admin.py file again and add an improvement to the Poll change list page: Filters. Add the
-following line to ``PollAdmin``::
+Edit your :file:`polls/admin.py` file again and add an improvement to the Poll
+change list page: Filters. Add the following line to ``PollAdmin``::
 
     list_filter = ['pub_date']
 
@@ -361,8 +398,8 @@ That adds a "Filter" sidebar that lets people filter the change list by the
    :alt: Polls change list page, updated
 
 The type of filter displayed depends on the type of field you're filtering on.
-Because ``pub_date`` is a DateTimeField, Django knows to give the default
-filter options for DateTimeFields: "Any date," "Today," "Past 7 days,"
+Because ``pub_date`` is a :class:`~django.db.models.DateTimeField`, Django
+knows to give appropriate filter options: "Any date," "Today," "Past 7 days,"
 "This month," "This year."
 
 This is shaping up well. Let's add some search capability::
@@ -374,7 +411,7 @@ search terms, Django will search the ``question`` field. You can use as many
 fields as you'd like -- although because it uses a ``LIKE`` query behind the
 scenes, keep it reasonable, to keep your database happy.
 
-Finally, because Poll objects have dates, it'd be convenient to be able to
+Finally, because ``Poll`` objects have dates, it'd be convenient to be able to
 drill down by date. Add this line::
 
     date_hierarchy = 'pub_date'
@@ -384,7 +421,7 @@ At top level, it displays all available years. Then it drills down to months
 and, ultimately, days.
 
 Now's also a good time to note that change lists give you free pagination. The
-default is to display 50 items per page. Change-list pagination, search boxes,
+default is to display 100 items per page. Change-list pagination, search boxes,
 filters, date-hierarchies and column-header-ordering all work together like you
 think they should.
 
@@ -398,26 +435,44 @@ That's easy to change, though, using Django's template system. The Django admin
 is powered by Django itself, and its interfaces use Django's own template
 system.
 
-Open your settings file (``mysite/settings.py``, remember) and look at the
-:setting:`TEMPLATE_DIRS` setting. :setting:`TEMPLATE_DIRS` is a tuple of
-filesystem directories to check when loading Django templates. It's a search
-path.
+.. _ref-customizing-your-projects-templates:
 
-By default, :setting:`TEMPLATE_DIRS` is empty. So, let's add a line to it, to
-tell Django where our templates live::
+Customizing your *project's* templates
+--------------------------------------
+
+Create a ``templates`` directory in your project directory. Templates can
+live anywhere on your filesystem that Django can access. (Django runs as
+whatever user your server runs.) However, keeping your templates within the
+project is a good convention to follow.
+
+Open your settings file (:file:`mysite/settings.py`, remember) and add a
+:setting:`TEMPLATE_DIRS` setting::
 
     TEMPLATE_DIRS = (
-        '/home/my_username/mytemplates', # Change this to your own directory.
+        '/path/to/mysite/templates', # Change this to your own directory.
     )
 
 Now copy the template ``admin/base_site.html`` from within the default Django
 admin template directory in the source code of Django itself
 (``django/contrib/admin/templates``) into an ``admin`` subdirectory of
 whichever directory you're using in :setting:`TEMPLATE_DIRS`. For example, if
-your :setting:`TEMPLATE_DIRS` includes ``'/home/my_username/mytemplates'``, as
+your :setting:`TEMPLATE_DIRS` includes ``'/path/to/mysite/templates'``, as
 above, then copy ``django/contrib/admin/templates/admin/base_site.html`` to
-``/home/my_username/mytemplates/admin/base_site.html``. Don't forget that
+``/path/to/mysite/templates/admin/base_site.html``. Don't forget that
 ``admin`` subdirectory.
+
+.. admonition:: Where are the Django source files?
+
+    If you have difficulty finding where the Django source files are located
+    on your system, run the following command:
+
+    .. code-block:: bash
+
+        python -c "
+        import sys
+        sys.path = sys.path[1:]
+        import django
+        print(django.__path__)"
 
 Then, just edit the file and replace the generic Django text with your own
 site's name as you see fit.
@@ -434,11 +489,24 @@ override a template, just do the same thing you did with ``base_site.html`` --
 copy it from the default directory into your custom directory, and make
 changes.
 
+Customizing your *application's* templates
+------------------------------------------
+
 Astute readers will ask: But if :setting:`TEMPLATE_DIRS` was empty by default,
 how was Django finding the default admin templates? The answer is that, by
 default, Django automatically looks for a ``templates/`` subdirectory within
-each app package, for use as a fallback. See the :ref:`template loader
-documentation <template-loaders>` for full information.
+each application package, for use as a fallback (don't forget that
+``django.contrib.admin`` is an application).
+
+Our poll application is not very complex and doesn't need custom admin
+templates. But if it grew more sophisticated and required modification of
+Django's standard admin templates for some of its functionality, it would be
+more sensible to modify the *application's* templates, rather than those in the
+*project*. That way, you could include the polls application in any new project
+and be assured that it would find the custom templates it needed.
+
+See the :ref:`template loader documentation <template-loaders>` for more
+information about how Django finds its templates.
 
 Customize the admin index page
 ==============================

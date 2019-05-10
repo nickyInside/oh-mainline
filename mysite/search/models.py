@@ -40,10 +40,12 @@ import mysite.base.decorators
 import django.contrib.contenttypes.models
 from django.utils import http
 
+logger = logging.getLogger(__name__)
+
 
 class OpenHatchModel(models.Model):
     created_date = models.DateTimeField(null=True, auto_now_add=True)
-    modified_date = models.DateTimeField(auto_now=True)
+    modified_date = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     class Meta:
         abstract = True
@@ -53,7 +55,7 @@ def get_image_data_scaled(image_data, width):
     # NOTE: We refuse to scale images if we do not
     # have the Python Imaging Library.
     if not mysite.base.depends.Image:
-        logging.info(
+        logger.info(
             "NOTE: We cannot resize this image, so we are going to pass it through. See ADVANCED_INSTALLATION.mkd for information on PIL.")
         return image_data
 
@@ -115,18 +117,13 @@ class Project(OpenHatchModel):
         return self.name
 
     @mysite.base.decorators.cached_property
-    def potential_mentor_count(self):
-        '''Return a number of potential mentors, counted as the
-        number of people who can mentor in the project by name unioned
-        with those who can mentor in the project's language.'''
-        all_mentor_person_ids = set()
+    def mentor_count(self):
+        '''Return a number of potential mentors, counted as the number of
+         people who can mentor in the project
+        '''
         import mysite.profile.view_helpers
-        for way_a_mentor_can_help in (self.name, self.language):
-            tq = mysite.profile.view_helpers.TagQuery('can_mentor',
-                                                      way_a_mentor_can_help)
-            all_mentor_person_ids.update(
-                tq.people.values_list('id', flat=True))
-        return len(all_mentor_person_ids)
+        tq = mysite.profile.view_helpers.TagQuery('can_mentor', self.name)
+        return tq.people.count()
 
     @staticmethod
     def create_dummy(**kwargs):
@@ -213,23 +210,6 @@ class Project(OpenHatchModel):
     # project.
     cached_contributor_count = models.IntegerField(default=0, null=True)
 
-    def populate_icon_from_ohloh(self):
-
-        oh = mysite.customs.ohloh.get_ohloh()
-        try:
-            icon_data = oh.get_icon_for_project(self.name)
-            self.date_icon_was_fetched_from_ohloh = datetime.datetime.utcnow()
-        except ValueError:
-            self.date_icon_was_fetched_from_ohloh = datetime.datetime.utcnow()
-            return False
-
-        # if you want to scale, use get_image_data_scaled(icon_data)
-        self.icon_raw.save('', ContentFile(icon_data))
-
-        # Since we are saving an icon, also update our scaled-down version of
-        # that icon for the badge.
-        self.update_scaled_icons_from_self_icon()
-        return True
 
     def get_url_of_icon_or_generic(self):
         # Recycle icon_smaller_for_badge since it's the same size as

@@ -1,6 +1,6 @@
-===================
-Community
-===================
+===============
+Community Guide
+===============
 
 .. toctree::
   :maxdepth: 2
@@ -12,6 +12,7 @@ Community
   web_analytics_team
   domain_team
   collaboration_tools
+  quotes_db
   ticket_tracking
   sprints
   thanks

@@ -21,19 +21,6 @@ function update_to_latest() {
     git merge origin/master --ff-only
 }
 
-function update_database() {
-    ### Initialize new databases, if necessary
-    python manage.py syncdb
-
-    ### Migrate databases, if necessary
-    python manage.py migrate --merge
-}
-
-function notify_web_server() {
-    ### Update the WSGI file so that Apache reloads the app.
-    touch mysite/scripts/app.wsgi
-}
-
 function notify_github() {
     ### Update deploy_$(hostname) branch on github.com so that
     ### it is very clear which commits are deployed where.
@@ -51,5 +38,3 @@ cd ~/milestone-a
 check_for_changed_files
 update_to_latest
 notify_github
-update_database
-notify_web_server

@@ -1,6 +1,8 @@
+from __future__ import absolute_import
+
 from django import forms
 
-from regressiontests.generic_views.models import Author
+from .models import Author
 
 
 class AuthorForm(forms.ModelForm):
@@ -9,3 +11,8 @@ class AuthorForm(forms.ModelForm):
 
     class Meta:
         model = Author
+
+
+class ContactForm(forms.Form):
+    name = forms.CharField()
+    message = forms.CharField(widget=forms.Textarea)

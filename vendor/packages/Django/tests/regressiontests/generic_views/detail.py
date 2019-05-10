@@ -1,7 +1,10 @@
+from __future__ import absolute_import
+
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
+from django.views.generic.base import View
 
-from regressiontests.generic_views.models import Artist, Author, Page
+from .models import Artist, Author, Page
 
 
 class DetailViewTest(TestCase):
@@ -12,6 +15,7 @@ class DetailViewTest(TestCase):
         res = self.client.get('/detail/obj/')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.context['object'], {'foo': 'bar'})
+        self.assertTrue(isinstance(res.context['view'], View))
         self.assertTemplateUsed(res, 'generic_views/detail.html')
 
     def test_detail_by_pk(self):
@@ -21,8 +25,22 @@ class DetailViewTest(TestCase):
         self.assertEqual(res.context['author'], Author.objects.get(pk=1))
         self.assertTemplateUsed(res, 'generic_views/author_detail.html')
 
+    def test_detail_by_custom_pk(self):
+        res = self.client.get('/detail/author/bycustompk/1/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['object'], Author.objects.get(pk=1))
+        self.assertEqual(res.context['author'], Author.objects.get(pk=1))
+        self.assertTemplateUsed(res, 'generic_views/author_detail.html')
+
     def test_detail_by_slug(self):
         res = self.client.get('/detail/author/byslug/scott-rosenberg/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['object'], Author.objects.get(slug='scott-rosenberg'))
+        self.assertEqual(res.context['author'], Author.objects.get(slug='scott-rosenberg'))
+        self.assertTemplateUsed(res, 'generic_views/author_detail.html')
+
+    def test_detail_by_custom_slug(self):
+        res = self.client.get('/detail/author/bycustomslug/scott-rosenberg/')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.context['object'], Author.objects.get(slug='scott-rosenberg'))
         self.assertEqual(res.context['author'], Author.objects.get(slug='scott-rosenberg'))
@@ -76,3 +94,8 @@ class DetailViewTest(TestCase):
 
     def test_invalid_queryset(self):
         self.assertRaises(ImproperlyConfigured, self.client.get, '/detail/author/invalid/qs/')
+
+    def test_non_model_object_with_meta(self):
+        res = self.client.get('/detail/nonmodel/1/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['object'].id, "non_model_1")

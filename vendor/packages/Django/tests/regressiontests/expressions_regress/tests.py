@@ -1,14 +1,15 @@
 """
 Spanning tests for all the operations that F() expressions can perform.
 """
+from __future__ import absolute_import
+
 import datetime
 
-from django.conf import settings
-from django.db import models, connection
+from django.db import connection
 from django.db.models import F
 from django.test import TestCase, Approximate, skipUnlessDBFeature
 
-from regressiontests.expressions_regress.models import Number, Experiment
+from .models import Number, Experiment
 
 
 class ExpressionsRegressTests(TestCase):
@@ -127,7 +128,7 @@ class ExpressionOperatorTests(TestCase):
 
     def test_lefthand_bitwise_and(self):
         # LH Bitwise ands on integers
-        Number.objects.filter(pk=self.n.pk).update(integer=F('integer') & 56)
+        Number.objects.filter(pk=self.n.pk).update(integer=F('integer').bitand(56))
 
         self.assertEqual(Number.objects.get(pk=self.n.pk).integer, 40)
         self.assertEqual(Number.objects.get(pk=self.n.pk).float, Approximate(15.500, places=3))
@@ -135,7 +136,7 @@ class ExpressionOperatorTests(TestCase):
     @skipUnlessDBFeature('supports_bitwise_or')
     def test_lefthand_bitwise_or(self):
         # LH Bitwise or on integers
-        Number.objects.filter(pk=self.n.pk).update(integer=F('integer') | 48)
+        Number.objects.filter(pk=self.n.pk).update(integer=F('integer').bitor(48))
 
         self.assertEqual(Number.objects.get(pk=self.n.pk).integer, 58)
         self.assertEqual(Number.objects.get(pk=self.n.pk).float, Approximate(15.500, places=3))
@@ -180,20 +181,6 @@ class ExpressionOperatorTests(TestCase):
         self.assertEqual(Number.objects.get(pk=self.n.pk).integer, 27)
         self.assertEqual(Number.objects.get(pk=self.n.pk).float, Approximate(15.500, places=3))
 
-    def test_right_hand_bitwise_and(self):
-        # RH Bitwise ands on integers
-        Number.objects.filter(pk=self.n.pk).update(integer=15 & F('integer'))
-
-        self.assertEqual(Number.objects.get(pk=self.n.pk).integer, 10)
-        self.assertEqual(Number.objects.get(pk=self.n.pk).float, Approximate(15.500, places=3))
-
-    @skipUnlessDBFeature('supports_bitwise_or')
-    def test_right_hand_bitwise_or(self):
-        # RH Bitwise or on integers
-        Number.objects.filter(pk=self.n.pk).update(integer=15 | F('integer'))
-
-        self.assertEqual(Number.objects.get(pk=self.n.pk).integer, 47)
-        self.assertEqual(Number.objects.get(pk=self.n.pk).float, Approximate(15.500, places=3))
 
 class FTimeDeltaTests(TestCase):
 
@@ -241,7 +228,7 @@ class FTimeDeltaTests(TestCase):
         # e2: started three days after assigned, small duration
         end = stime+delta2
         e2 = Experiment.objects.create(name='e2',
-            assigned=sday-datetime.timedelta(3), start=stime, end=end, 
+            assigned=sday-datetime.timedelta(3), start=stime, end=end,
             completed=end.date())
         self.deltas.append(delta2)
         self.delays.append(e2.start-
@@ -294,22 +281,22 @@ class FTimeDeltaTests(TestCase):
     def test_exclude(self):
         for i in range(len(self.deltas)):
             delta = self.deltas[i]
-            test_set = [e.name for e in 
+            test_set = [e.name for e in
                 Experiment.objects.exclude(end__lt=F('start')+delta)]
             self.assertEqual(test_set, self.expnames[i:])
 
-            test_set = [e.name for e in 
+            test_set = [e.name for e in
                 Experiment.objects.exclude(end__lte=F('start')+delta)]
             self.assertEqual(test_set, self.expnames[i+1:])
 
     def test_date_comparison(self):
         for i in range(len(self.days_long)):
             days = self.days_long[i]
-            test_set = [e.name for e in 
+            test_set = [e.name for e in
                 Experiment.objects.filter(completed__lt=F('assigned')+days)]
             self.assertEqual(test_set, self.expnames[:i])
 
-            test_set = [e.name for e in 
+            test_set = [e.name for e in
                 Experiment.objects.filter(completed__lte=F('assigned')+days)]
             self.assertEqual(test_set, self.expnames[:i+1])
 
@@ -384,7 +371,7 @@ class FTimeDeltaTests(TestCase):
     def test_delta_invalid_op_and(self):
         raised = False
         try:
-            r = repr(Experiment.objects.filter(end__lt=F('start')&self.deltas[0]))
+            r = repr(Experiment.objects.filter(end__lt=F('start').bitand(self.deltas[0])))
         except TypeError:
             raised = True
         self.assertTrue(raised, "TypeError not raised on attempt to binary and a datetime with a timedelta.")
@@ -392,7 +379,7 @@ class FTimeDeltaTests(TestCase):
     def test_delta_invalid_op_or(self):
         raised = False
         try:
-            r = repr(Experiment.objects.filter(end__lt=F('start')|self.deltas[0]))
+            r = repr(Experiment.objects.filter(end__lt=F('start').bitor(self.deltas[0])))
         except TypeError:
             raised = True
         self.assertTrue(raised, "TypeError not raised on attempt to binary or a datetime with a timedelta.")

@@ -1,43 +1,40 @@
 # -*- coding: utf-8 -*-
 # Unittests for fixtures.
+from __future__ import absolute_import, unicode_literals
+
 import os
 import re
-import sys
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
+from django.core.serializers.base import DeserializationError
 from django.core import management
-from django.core.management.commands.dumpdata import sort_dependencies
 from django.core.management.base import CommandError
+from django.core.management.commands.dumpdata import sort_dependencies
+from django.db import transaction, IntegrityError
 from django.db.models import signals
-from django.db import transaction
-from django.test import TestCase, TransactionTestCase, skipIfDBFeature, \
-    skipUnlessDBFeature
+from django.test import (TestCase, TransactionTestCase, skipIfDBFeature,
+    skipUnlessDBFeature)
+from django.test.utils import override_settings
+from django.utils.encoding import force_text
+from django.utils._os import upath
+from django.utils import six
+from django.utils.six import PY3, StringIO
+import json
 
-from models import Animal, Stuff
-from models import Absolute, Parent, Child
-from models import Article, Widget
-from models import Store, Person, Book
-from models import NKChild, RefToNKChild
-from models import Circle1, Circle2, Circle3
-from models import ExternalDependency
-from models import Thingy
-
-
-pre_save_checks = []
-def animal_pre_save_check(signal, sender, instance, **kwargs):
-    "A signal that is used to check the type of data loaded from fixtures"
-    pre_save_checks.append(
-        (
-            'Count = %s (%s)' % (instance.count, type(instance.count)),
-            'Weight = %s (%s)' % (instance.weight, type(instance.weight)),
-        )
-    )
+from .models import (Animal, Stuff, Absolute, Parent, Child, Article, Widget,
+    Store, Person, Book, NKChild, RefToNKChild, Circle1, Circle2, Circle3,
+    ExternalDependency, Thingy)
 
 
 class TestFixtures(TestCase):
+
+    def animal_pre_save_check(self, signal, sender, instance, **kwargs):
+        self.pre_save_checks.append(
+            (
+                'Count = %s (%s)' % (instance.count, type(instance.count)),
+                'Weight = %s (%s)' % (instance.weight, type(instance.weight)),
+            )
+        )
+
     def test_duplicate_pk(self):
         """
         This is a regression test for ticket #3790.
@@ -61,6 +58,34 @@ class TestFixtures(TestCase):
         )
         animal.save()
         self.assertGreater(animal.id, 1)
+
+    def test_loaddata_not_found_fields_not_ignore(self):
+        """
+        Test for ticket #9279 -- Error is raised for entries in
+        the serialised data for fields that have been removed
+        from the database when not ignored.
+        """
+        with self.assertRaises(DeserializationError):
+            management.call_command(
+                'loaddata',
+                'sequence_extra',
+                verbosity=0
+            )
+
+    def test_loaddata_not_found_fields_ignore(self):
+        """
+        Test for ticket #9279 -- Ignores entries in
+        the serialised data for fields that have been removed
+        from the database.
+        """
+        management.call_command(
+            'loaddata',
+            'sequence_extra',
+            ignore=True,
+            verbosity=0,
+            commit=False
+        )
+        self.assertEqual(Animal.specimens.all()[0].name, 'Lion')
 
     @skipIfDBFeature('interprets_empty_strings_as_nulls')
     def test_pretty_print_xml(self):
@@ -91,7 +116,7 @@ class TestFixtures(TestCase):
             verbosity=0,
             commit=False
         )
-        self.assertEqual(Stuff.objects.all()[0].name, u'')
+        self.assertEqual(Stuff.objects.all()[0].name, '')
         self.assertEqual(Stuff.objects.all()[0].owner, None)
 
     def test_absolute_path(self):
@@ -104,7 +129,7 @@ class TestFixtures(TestCase):
         fixture directory.
         """
         load_absolute_path = os.path.join(
-            os.path.dirname(__file__),
+            os.path.dirname(upath(__file__)),
             'fixtures',
             'absolute.json'
         )
@@ -116,24 +141,34 @@ class TestFixtures(TestCase):
         )
         self.assertEqual(Absolute.load_count, 1)
 
-
     def test_unknown_format(self):
         """
         Test for ticket #4371 -- Loading data of an unknown format should fail
         Validate that error conditions are caught correctly
         """
-        stderr = StringIO()
-        management.call_command(
-            'loaddata',
-            'bad_fixture1.unkn',
-            verbosity=0,
-            commit=False,
-            stderr=stderr,
-        )
-        self.assertEqual(
-            stderr.getvalue(),
-            "Problem installing fixture 'bad_fixture1': unkn is not a known serialization format.\n"
-        )
+        with six.assertRaisesRegex(self, management.CommandError,
+                "Problem installing fixture 'bad_fixture1': "
+                "unkn is not a known serialization format."):
+            management.call_command(
+                'loaddata',
+                'bad_fixture1.unkn',
+                verbosity=0,
+                commit=False,
+            )
+
+    @override_settings(SERIALIZATION_MODULES={'unkn': 'unexistent.path'})
+    def test_unimportable_serializer(self):
+        """
+        Test that failing serializer import raises the proper error
+        """
+        with six.assertRaisesRegex(self, ImportError,
+                r"No module named.*unexistent"):
+            management.call_command(
+                'loaddata',
+                'bad_fixture1.unkn',
+                verbosity=0,
+                commit=False,
+            )
 
     def test_invalid_data(self):
         """
@@ -141,18 +176,14 @@ class TestFixtures(TestCase):
         using explicit filename.
         Validate that error conditions are caught correctly
         """
-        stderr = StringIO()
-        management.call_command(
-            'loaddata',
-            'bad_fixture2.xml',
-            verbosity=0,
-            commit=False,
-            stderr=stderr,
-        )
-        self.assertEqual(
-            stderr.getvalue(),
-            "No fixture data found for 'bad_fixture2'. (File format may be invalid.)\n"
-        )
+        with six.assertRaisesRegex(self, management.CommandError,
+                "No fixture data found for 'bad_fixture2'. \(File format may be invalid.\)"):
+            management.call_command(
+                'loaddata',
+                'bad_fixture2.xml',
+                verbosity=0,
+                commit=False,
+            )
 
     def test_invalid_data_no_ext(self):
         """
@@ -160,73 +191,42 @@ class TestFixtures(TestCase):
         without file extension.
         Validate that error conditions are caught correctly
         """
-        stderr = StringIO()
-        management.call_command(
-            'loaddata',
-            'bad_fixture2',
-            verbosity=0,
-            commit=False,
-            stderr=stderr,
-        )
-        self.assertEqual(
-            stderr.getvalue(),
-            "No fixture data found for 'bad_fixture2'. (File format may be invalid.)\n"
-        )
+        with six.assertRaisesRegex(self, management.CommandError,
+                "No fixture data found for 'bad_fixture2'. \(File format may be invalid.\)"):
+            management.call_command(
+                'loaddata',
+                'bad_fixture2',
+                verbosity=0,
+                commit=False,
+            )
 
     def test_empty(self):
         """
         Test for ticket #4371 -- Loading a fixture file with no data returns an error.
         Validate that error conditions are caught correctly
         """
-        stderr = StringIO()
-        management.call_command(
-            'loaddata',
-            'empty',
-            verbosity=0,
-            commit=False,
-            stderr=stderr,
-        )
-        self.assertEqual(
-            stderr.getvalue(),
-            "No fixture data found for 'empty'. (File format may be invalid.)\n"
-        )
-
-    def test_abort_loaddata_on_error(self):
-        """
-        Test for ticket #4371 -- If any of the fixtures contain an error,
-        loading is aborted.
-        Validate that error conditions are caught correctly
-        """
-        stderr = StringIO()
-        management.call_command(
-            'loaddata',
-            'empty',
-            verbosity=0,
-            commit=False,
-            stderr=stderr,
-        )
-        self.assertEqual(
-            stderr.getvalue(),
-            "No fixture data found for 'empty'. (File format may be invalid.)\n"
-        )
+        with six.assertRaisesRegex(self, management.CommandError,
+                "No fixture data found for 'empty'. \(File format may be invalid.\)"):
+            management.call_command(
+                'loaddata',
+                'empty',
+                verbosity=0,
+                commit=False,
+            )
 
     def test_error_message(self):
         """
         (Regression for #9011 - error message is correct)
         """
-        stderr = StringIO()
-        management.call_command(
-            'loaddata',
-            'bad_fixture2',
-            'animal',
-            verbosity=0,
-            commit=False,
-            stderr=stderr,
-        )
-        self.assertEqual(
-            stderr.getvalue(),
-            "No fixture data found for 'bad_fixture2'. (File format may be invalid.)\n"
-        )
+        with six.assertRaisesRegex(self, management.CommandError,
+                "^No fixture data found for 'bad_fixture2'. \(File format may be invalid.\)$"):
+            management.call_command(
+                'loaddata',
+                'bad_fixture2',
+                'animal',
+                verbosity=0,
+                commit=False,
+            )
 
     def test_pg_sequence_resetting_checks(self):
         """
@@ -275,22 +275,24 @@ class TestFixtures(TestCase):
         Test for tickets #8298, #9942 - Field values should be coerced into the
         correct type by the deserializer, not as part of the database write.
         """
-        global pre_save_checks
-        pre_save_checks = []
-        signals.pre_save.connect(animal_pre_save_check)
-        management.call_command(
-            'loaddata',
-            'animal.xml',
-            verbosity=0,
-            commit=False,
-        )
-        self.assertEqual(
-            pre_save_checks,
-            [
-                ("Count = 42 (<type 'int'>)", "Weight = 1.2 (<type 'float'>)")
-            ]
-        )
-        signals.pre_save.disconnect(animal_pre_save_check)
+        self.pre_save_checks = []
+        signals.pre_save.connect(self.animal_pre_save_check)
+        try:
+            management.call_command(
+                'loaddata',
+                'animal.xml',
+                verbosity=0,
+                commit=False,
+            )
+            self.assertEqual(
+                self.pre_save_checks,
+                [
+                    ("Count = 42 (<%s 'int'>)" % ('class' if PY3 else 'type'),
+                     "Weight = 1.2 (<%s 'float'>)" % ('class' if PY3 else 'type'))
+                ]
+            )
+        finally:
+            signals.pre_save.disconnect(self.animal_pre_save_check)
 
     def test_dumpdata_uses_default_manager(self):
         """
@@ -333,15 +335,17 @@ class TestFixtures(TestCase):
         # between different Python versions.
         data = re.sub('0{6,}\d', '', data)
 
-        lion_json = '{"pk": 1, "model": "fixtures_regress.animal", "fields": {"count": 3, "weight": 1.2, "name": "Lion", "latin_name": "Panthera leo"}}'
-        emu_json = '{"pk": 10, "model": "fixtures_regress.animal", "fields": {"count": 42, "weight": 1.2, "name": "Emu", "latin_name": "Dromaius novaehollandiae"}}'
-        platypus_json = '{"pk": %d, "model": "fixtures_regress.animal", "fields": {"count": 2, "weight": 2.2, "name": "Platypus", "latin_name": "Ornithorhynchus anatinus"}}'
-        platypus_json = platypus_json % animal.pk
+        animals_data = sorted([
+            {"pk": 1, "model": "fixtures_regress.animal", "fields": {"count": 3, "weight": 1.2, "name": "Lion", "latin_name": "Panthera leo"}},
+            {"pk": 10, "model": "fixtures_regress.animal", "fields": {"count": 42, "weight": 1.2, "name": "Emu", "latin_name": "Dromaius novaehollandiae"}},
+            {"pk": animal.pk, "model": "fixtures_regress.animal", "fields": {"count": 2, "weight": 2.2, "name": "Platypus", "latin_name": "Ornithorhynchus anatinus"}},
+        ], key=lambda x: x["pk"])
 
-        self.assertEqual(len(data), len('[%s]' % ', '.join([lion_json, emu_json, platypus_json])))
-        self.assertTrue(lion_json in data)
-        self.assertTrue(emu_json in data)
-        self.assertTrue(platypus_json in data)
+        data = sorted(json.loads(data), key=lambda x: x["pk"])
+
+        self.maxDiff = 1024
+        self.assertEqual(data, animals_data)
+
 
     def test_proxy_model_included(self):
         """
@@ -357,20 +361,84 @@ class TestFixtures(TestCase):
             format='json',
             stdout=stdout
         )
-        self.assertEqual(
+        self.assertJSONEqual(
             stdout.getvalue(),
             """[{"pk": %d, "model": "fixtures_regress.widget", "fields": {"name": "grommet"}}]"""
             % widget.pk
             )
 
+    def test_loaddata_works_when_fixture_has_forward_refs(self):
+        """
+        Regression for #3615 - Forward references cause fixtures not to load in MySQL (InnoDB)
+        """
+        management.call_command(
+            'loaddata',
+            'forward_ref.json',
+            verbosity=0,
+            commit=False
+        )
+        self.assertEqual(Book.objects.all()[0].id, 1)
+        self.assertEqual(Person.objects.all()[0].id, 4)
+
+    def test_loaddata_raises_error_when_fixture_has_invalid_foreign_key(self):
+        """
+        Regression for #3615 - Ensure data with nonexistent child key references raises error
+        """
+        with six.assertRaisesRegex(self, IntegrityError,
+                "Problem installing fixture"):
+            management.call_command(
+                'loaddata',
+                'forward_ref_bad_data.json',
+                verbosity=0,
+                commit=False,
+            )
+
+    _cur_dir = os.path.dirname(os.path.abspath(upath(__file__)))
+
+    @override_settings(FIXTURE_DIRS=[os.path.join(_cur_dir, 'fixtures_1'),
+                                     os.path.join(_cur_dir, 'fixtures_2')])
+    def test_loaddata_forward_refs_split_fixtures(self):
+        """
+        Regression for #17530 - should be able to cope with forward references
+        when the fixtures are not in the same files or directories.
+        """
+        management.call_command(
+            'loaddata',
+            'forward_ref_1.json',
+            'forward_ref_2.json',
+            verbosity=0,
+            commit=False
+        )
+        self.assertEqual(Book.objects.all()[0].id, 1)
+        self.assertEqual(Person.objects.all()[0].id, 4)
+
+    def test_loaddata_no_fixture_specified(self):
+        """
+        Regression for #7043 - Error is quickly reported when no fixtures is provided in the command line.
+        """
+        with six.assertRaisesRegex(self, management.CommandError,
+                "No database fixture specified. Please provide the path of "
+                "at least one fixture in the command line."):
+            management.call_command(
+                'loaddata',
+                verbosity=0,
+                commit=False,
+            )
+
+    def test_loaddata_not_existant_fixture_file(self):
+        stdout_output = StringIO()
+        management.call_command(
+            'loaddata',
+            'this_fixture_doesnt_exist',
+            verbosity=2,
+            commit=False,
+            stdout=stdout_output,
+        )
+        self.assertTrue("No xml fixture 'this_fixture_doesnt_exist' in" in
+            force_text(stdout_output.getvalue()))
+
 
 class NaturalKeyFixtureTests(TestCase):
-    def assertRaisesMessage(self, exc, msg, func, *args, **kwargs):
-        try:
-            func(*args, **kwargs)
-        except Exception, e:
-            self.assertEqual(msg, str(e))
-            self.assertTrue(isinstance(e, exc), "Expected %s, got %s" % (exc, type(e)))
 
     def test_nk_deserialize(self):
         """
@@ -454,9 +522,9 @@ class NaturalKeyFixtureTests(TestCase):
             use_natural_keys=True,
             stdout=stdout,
         )
-        self.assertEqual(
+        self.assertJSONEqual(
             stdout.getvalue(),
-            """[{"pk": 2, "model": "fixtures_regress.store", "fields": {"name": "Amazon"}}, {"pk": 3, "model": "fixtures_regress.store", "fields": {"name": "Borders"}}, {"pk": 4, "model": "fixtures_regress.person", "fields": {"name": "Neal Stephenson"}}, {"pk": 1, "model": "fixtures_regress.book", "fields": {"stores": [["Amazon"], ["Borders"]], "name": "Cryptonomicon", "author": ["Neal Stephenson"]}}]"""
+            """[{"pk": 2, "model": "fixtures_regress.store", "fields": {"main": null, "name": "Amazon"}}, {"pk": 3, "model": "fixtures_regress.store", "fields": {"main": null, "name": "Borders"}}, {"pk": 4, "model": "fixtures_regress.person", "fields": {"name": "Neal Stephenson"}}, {"pk": 1, "model": "fixtures_regress.book", "fields": {"stores": [["Amazon"], ["Borders"]], "name": "Cryptonomicon", "author": ["Neal Stephenson"]}}]"""
         )
 
     def test_dependency_sorting(self):

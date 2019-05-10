@@ -35,9 +35,9 @@
 
     {# Mentors #}
     <div class="helpers">
-        {% if bug.project.get_mentors_search_url and bug.project.potential_mentor_count %}
+        {% if bug.project.get_mentors_search_url and bug.project.mentor_count %}
         <a href="{{ bug.project.get_mentors_search_url }}">
-            Mentors ({{bug.project.potential_mentor_count}})</a>
+            Mentors: {{ bug.project.mentor_count }} (and {{bug.project.get_language_mentors_count }} in {{ bug.project.language }})</a>
         {% endif %}
     </div>
 
@@ -49,7 +49,7 @@
                 {{ bug.project.language }}
             </div>
         {% endif %}
-        <a style='font-size: .9em; display: block; margin-top: 1em;' href='{{ bug.project.get_url }}'>More about this project</a>
+        <a href='{{ bug.project.get_url }}'>More about this project</a>
     </div>
 
 </div>
@@ -73,7 +73,7 @@
             </a>
         </div>
         <div class='top_right'>
-            <span class='expand'><a href='javascript:void(0);'>expand</a></span>
+            <span class='expand'><a href='javascript:void(0);' class="expand-link">expand</a></span>
             <span class='sep'>&middot;</span>
             <span class='link'><a 
                         rel='tipsy-south'

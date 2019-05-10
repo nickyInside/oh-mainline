@@ -34,3 +34,10 @@ mysite/missions-userdata/git/*
 mysite/site.db
 mysite/local_settings.py
 .idea/
+.tags
+tags
+.DS_Store
+*.sublime-workspace
+*.sublime-project
+coverage_html_report/
+*.json.gz

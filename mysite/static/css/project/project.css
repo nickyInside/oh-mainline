@@ -144,3 +144,10 @@ body#project .tab_nav li, body#project .tab_nav h3 {
 body#project .tab_nav .ui-state-active h3 {
     background: white;
     }
+body#bugset_create #button-container {
+    display: inline;
+    float: right;
+}
+body#landing #subscription-email {
+    display: block;
+}

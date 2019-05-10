@@ -25,42 +25,40 @@
 # This is so that new contributors can run the OpenHatch site without
 # installing these hard-to-install dependencies.
 
-# Used within this file
 import os
 import logging
+import django.conf
 
-# Wrap lxml and the modules that are part of it
+logger = logging.getLogger(__name__)
 
 
 class nothing(object):
+    """ Used if a module (i.e. lxml, PIL, SVN, postmap) does not not exist """
     pass
 
+"""
+lxml - XML
+Wrap lxml and the modules that are part of it
+"""
 try:
     import lxml
     import lxml.etree
     import lxml.html
 except:
-    lxml = nothing()
+    lxml = nothing()   # Set lxml to the 'nothing' class
     lxml.etree = None
     lxml.html = None
 
 if lxml.html is None:
-    logging.info("Some parts of the OpenHatch site may fail because the lxml"
-                 " library is not installed. Look in ADVANCED_INSTALLATION.mkd for"
-                 " information about lxml.")
+    logger.info("Some parts of the OpenHatch site may fail because the "
+                 "lxml library is not installed. Look in "
+                 "ADVANCED_INSTALLATION.mkd for information about lxml.")
 
-# Provide a helper to check if svnadmin is available. If not,
-# we can skip running code (and tests) that require it.
-
-
-def svnadmin_available():
-    # FIXME: This should move to a variable controlled
-    # by settings.py.
-    SVNADMIN_PATH = '/usr/bin/svnadmin'
-    return os.path.exists(SVNADMIN_PATH)
-
-# Here we try to import "Image", from the Python Imaging Library.
-# If we fail, Image is None.
+"""
+PIL, Pillow - Images
+Try to import "Image", from the Python Imaging Library.
+If we fail, Image is None.
+"""
 Image = None
 try:
     import Image
@@ -75,16 +73,28 @@ except:
         sys.modules['Image'] = sys.modules['sys']
 
 
+def svnadmin_available():
+    """
+    Checks if Subversion's svnadmin is available locally. If not
+    available, svn missions and tests should be skipped.
+    """
+    return os.path.exists(django.conf.settings.SVNADMIN_PATH)
+
+
 def postmap_available(already_emitted_warning=[]):
-    # Module-level state is used to track if we already emitted the warning.
-    # It is not thread-safe, but it sure is convenient.
+    """
+    Checks if POSTMAP is available
+    Module-level state is used to track if we already emitted the warning.
+    It is not thread-safe, but it sure is convenient.
+    """
     POSTMAP_PATH = '/usr/sbin/postmap'
     if not os.path.exists(POSTMAP_PATH):
         if already_emitted_warning:
             pass
         else:
             already_emitted_warning.append(True)
-            logging.warning(
-                'postmap binary not found at {0}. Look in ADVANCED_INSTALLATION for the section about postfix for more information.'.format(POSTMAP_PATH))
+            logger.warn('postmap binary not found at {0}. Look in '
+                         'ADVANCED_INSTALLATION for the section about '
+                         'postfix for more information.'.format(POSTMAP_PATH))
         return False
     return True

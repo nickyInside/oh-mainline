@@ -6,22 +6,41 @@ test case that is capable of testing the capabilities of
 the serializers. This includes all valid data values, plus
 forward, backwards and self references.
 """
-
+from __future__ import absolute_import, unicode_literals
 
 import datetime
 import decimal
+from django.core.serializers.xml_serializer import DTDForbidden
+
 try:
-    from cStringIO import StringIO
+    import yaml
 except ImportError:
-    from StringIO import StringIO
+    yaml = None
 
-from django.conf import settings
-from django.core import serializers, management
-from django.db import transaction, DEFAULT_DB_ALIAS, connection
+from django.core import serializers
+from django.core.serializers import SerializerDoesNotExist
+from django.core.serializers.base import DeserializationError
+from django.db import connection, models
+from django.http import HttpResponse
 from django.test import TestCase
+from django.utils import six
 from django.utils.functional import curry
+from django.utils.unittest import skipUnless
 
-from models import *
+from .models import (BooleanData, CharData, DateData, DateTimeData, EmailData,
+    FileData, FilePathData, DecimalData, FloatData, IntegerData, IPAddressData,
+    GenericIPAddressData, NullBooleanData, PositiveIntegerData,
+    PositiveSmallIntegerData, SlugData, SmallData, TextData, TimeData,
+    GenericData, Anchor, UniqueAnchor, FKData, M2MData, O2OData,
+    FKSelfData, M2MSelfData, FKDataToField, FKDataToO2O, M2MIntermediateData,
+    Intermediate, BooleanPKData, CharPKData, EmailPKData, FilePathPKData,
+    DecimalPKData, FloatPKData, IntegerPKData, IPAddressPKData,
+    GenericIPAddressPKData, PositiveIntegerPKData,
+    PositiveSmallIntegerPKData, SlugPKData, SmallPKData,
+    AutoNowDateTimeData, ModifyingSaveData, InheritAbstractModel, BaseModel,
+    ExplicitInheritBaseModel, InheritBaseModel, ProxyBaseModel,
+    ProxyProxyBaseModel, BigIntegerData, LengthModel, Tag, ComplexModel,
+    NaturalKeyAnchor, FKDataNaturalKey)
 
 # A set of functions that can be used to recreate
 # test data objects of various kinds.
@@ -83,7 +102,7 @@ def pk_create(pk, klass, data):
 def inherited_create(pk, klass, data):
     instance = klass(id=pk,**data)
     # This isn't a raw save because:
-    #  1) we're testing inheritance, not field behaviour, so none
+    #  1) we're testing inheritance, not field behavior, so none
     #     of the field values need to be protected.
     #  2) saving the child class and having the parent created
     #     automatically is easier than manually creating both.
@@ -166,7 +185,7 @@ test_data = [
     (data_obj, 15, CharData, None),
     # (We use something that will fit into a latin1 database encoding here,
     # because that is still the default used on many system setups.)
-    (data_obj, 16, CharData, u'\xa5'),
+    (data_obj, 16, CharData, '\xa5'),
     (data_obj, 20, DateData, datetime.date(2006,6,16)),
     (data_obj, 21, DateData, None),
     (data_obj, 30, DateTimeData, datetime.datetime(2006,6,16,10,42,37)),
@@ -195,11 +214,11 @@ test_data = [
     #(XX, ImageData
     (data_obj, 90, IPAddressData, "127.0.0.1"),
     (data_obj, 91, IPAddressData, None),
+    (data_obj, 95, GenericIPAddressData, "fe80:1424:2223:6cff:fe8a:2e8a:2151:abcd"),
+    (data_obj, 96, GenericIPAddressData, None),
     (data_obj, 100, NullBooleanData, True),
     (data_obj, 101, NullBooleanData, False),
     (data_obj, 102, NullBooleanData, None),
-    (data_obj, 110, PhoneData, "212-634-5789"),
-    (data_obj, 111, PhoneData, None),
     (data_obj, 120, PositiveIntegerData, 123456789),
     (data_obj, 121, PositiveIntegerData, None),
     (data_obj, 130, PositiveSmallIntegerData, 12),
@@ -219,9 +238,6 @@ The end."""),
     (data_obj, 162, TextData, None),
     (data_obj, 170, TimeData, datetime.time(10,42,37)),
     (data_obj, 171, TimeData, None),
-    (data_obj, 180, USStateData, "MA"),
-    (data_obj, 181, USStateData, None),
-    (data_obj, 182, USStateData, ""),
 
     (generic_obj, 200, GenericData, ['Generic Object 1', 'tag1', 'tag2']),
     (generic_obj, 201, GenericData, ['Generic Object 2', 'tag2', 'tag3']),
@@ -297,9 +313,9 @@ The end."""),
     (pk_obj, 682, IntegerPKData, 0),
 #     (XX, ImagePKData
     (pk_obj, 690, IPAddressPKData, "127.0.0.1"),
+    (pk_obj, 695, GenericIPAddressPKData, "fe80:1424:2223:6cff:fe8a:2e8a:2151:abcd"),
     # (pk_obj, 700, NullBooleanPKData, True),
     # (pk_obj, 701, NullBooleanPKData, False),
-    (pk_obj, 710, PhonePKData, "212-634-5789"),
     (pk_obj, 720, PositiveIntegerPKData, 123456789),
     (pk_obj, 730, PositiveSmallIntegerPKData, 12),
     (pk_obj, 740, SlugPKData, "this-is-a-slug"),
@@ -311,7 +327,6 @@ The end."""),
 # Several of them.
 # The end."""),
 #    (pk_obj, 770, TimePKData, datetime.time(10,42,37)),
-    (pk_obj, 780, USStatePKData, "MA"),
 #     (pk_obj, 790, XMLPKData, "<foo></foo>"),
 
     (data_obj, 800, AutoNowDateTimeData, datetime.datetime(2006,6,16,10,42,37)),
@@ -327,6 +342,12 @@ The end."""),
     (data_obj, 1003, BigIntegerData, None),
     (data_obj, 1004, LengthModel, 0),
     (data_obj, 1005, LengthModel, 1),
+]
+
+natural_key_test_data = [
+    (data_obj, 1100, NaturalKeyAnchor, "Natural Key Anghor"),
+    (fk_obj, 1101, FKDataNaturalKey, 1100),
+    (fk_obj, 1102, FKDataNaturalKey, None),
 ]
 
 # Because Oracle treats the empty string as NULL, Oracle is expected to fail
@@ -350,7 +371,51 @@ if connection.features.allows_primary_key_0:
 # Dynamically create serializer tests to ensure that all
 # registered serializers are automatically tested.
 class SerializerTests(TestCase):
-    pass
+    def test_get_unknown_serializer(self):
+        """
+        #15889: get_serializer('nonsense') raises a SerializerDoesNotExist
+        """
+        with self.assertRaises(SerializerDoesNotExist):
+            serializers.get_serializer("nonsense")
+
+        with self.assertRaises(KeyError):
+            serializers.get_serializer("nonsense")
+
+        # SerializerDoesNotExist is instantiated with the nonexistent format
+        with self.assertRaises(SerializerDoesNotExist) as cm:
+            serializers.get_serializer("nonsense")
+        self.assertEqual(cm.exception.args, ("nonsense",))
+
+    def test_unregister_unkown_serializer(self):
+        with self.assertRaises(SerializerDoesNotExist):
+            serializers.unregister_serializer("nonsense")
+
+    def test_get_unkown_deserializer(self):
+        with self.assertRaises(SerializerDoesNotExist):
+            serializers.get_deserializer("nonsense")
+
+    def test_json_deserializer_exception(self):
+        with self.assertRaises(DeserializationError):
+            for obj in serializers.deserialize("json", """[{"pk":1}"""):
+                pass
+
+    @skipUnless(yaml, "PyYAML not installed")
+    def test_yaml_deserializer_exception(self):
+        with self.assertRaises(DeserializationError):
+            for obj in serializers.deserialize("yaml", "{"):
+                pass
+
+    def test_serialize_proxy_model(self):
+        BaseModel.objects.create(parent_data=1)
+        base_objects = BaseModel.objects.all()
+        proxy_objects = ProxyBaseModel.objects.all()
+        proxy_proxy_objects = ProxyProxyBaseModel.objects.all()
+        base_data = serializers.serialize("json", base_objects)
+        proxy_data = serializers.serialize("json", proxy_objects)
+        proxy_proxy_data = serializers.serialize("json", proxy_proxy_objects)
+        self.assertEqual(base_data, proxy_data.replace('proxy', ''))
+        self.assertEqual(base_data, proxy_proxy_data.replace('proxy', ''))
+
 
 def serializerTest(format, self):
 
@@ -358,7 +423,8 @@ def serializerTest(format, self):
     objects = []
     instance_count = {}
     for (func, pk, klass, datum) in test_data:
-        objects.extend(func[0](pk, klass, datum))
+        with connection.constraint_checks_disabled():
+            objects.extend(func[0](pk, klass, datum))
 
     # Get a count of the number of objects created for each class
     for klass in instance_count:
@@ -383,13 +449,42 @@ def serializerTest(format, self):
     for klass, count in instance_count.items():
         self.assertEqual(count, klass.objects.count())
 
+def naturalKeySerializerTest(format, self):
+    # Create all the objects defined in the test data
+    objects = []
+    instance_count = {}
+    for (func, pk, klass, datum) in natural_key_test_data:
+        with connection.constraint_checks_disabled():
+            objects.extend(func[0](pk, klass, datum))
+
+    # Get a count of the number of objects created for each class
+    for klass in instance_count:
+        instance_count[klass] = klass.objects.count()
+
+    # Serialize the test database
+    serialized_data = serializers.serialize(format, objects, indent=2,
+        use_natural_keys=True)
+
+    for obj in serializers.deserialize(format, serialized_data):
+        obj.save()
+
+    # Assert that the deserialized data is the same
+    # as the original source
+    for (func, pk, klass, datum) in natural_key_test_data:
+        func[1](self, pk, klass, datum)
+
+    # Assert that the number of objects deserialized is the
+    # same as the number that was serialized.
+    for klass, count in instance_count.items():
+        self.assertEqual(count, klass.objects.count())
+
 def fieldsTest(format, self):
     obj = ComplexModel(field1='first', field2='second', field3='third')
     obj.save_base(raw=True)
 
     # Serialize then deserialize the test database
     serialized_data = serializers.serialize(format, [obj], indent=2, fields=('field1','field3'))
-    result = serializers.deserialize(format, serialized_data).next()
+    result = next(serializers.deserialize(format, serialized_data))
 
     # Check that the deserialized object contains data in only the serialized fields.
     self.assertEqual(result.object.field1, 'first')
@@ -401,18 +496,37 @@ def streamTest(format, self):
     obj.save_base(raw=True)
 
     # Serialize the test database to a stream
-    stream = StringIO()
-    serializers.serialize(format, [obj], indent=2, stream=stream)
+    for stream in (six.StringIO(), HttpResponse()):
+        serializers.serialize(format, [obj], indent=2, stream=stream)
 
-    # Serialize normally for a comparison
-    string_data = serializers.serialize(format, [obj], indent=2)
+        # Serialize normally for a comparison
+        string_data = serializers.serialize(format, [obj], indent=2)
 
-    # Check that the two are the same
-    self.assertEqual(string_data, stream.getvalue())
-    stream.close()
+        # Check that the two are the same
+        if isinstance(stream, six.StringIO):
+            self.assertEqual(string_data, stream.getvalue())
+        else:
+            self.assertEqual(string_data, stream.content.decode('utf-8'))
+        stream.close()
 
 for format in serializers.get_serializer_formats():
     setattr(SerializerTests, 'test_' + format + '_serializer', curry(serializerTest, format))
+    setattr(SerializerTests, 'test_' + format + '_natural_key_serializer', curry(naturalKeySerializerTest, format))
     setattr(SerializerTests, 'test_' + format + '_serializer_fields', curry(fieldsTest, format))
     if format != 'python':
         setattr(SerializerTests, 'test_' + format + '_serializer_stream', curry(streamTest, format))
+
+
+class XmlDeserializerSecurityTests(TestCase):
+
+    def test_no_dtd(self):
+        """
+        The XML deserializer shouldn't allow a DTD.
+
+        This is the most straightforward way to prevent all entity definitions
+        and avoid both external entities and entity-expansion attacks.
+
+        """
+        xml = '<?xml version="1.0" standalone="no"?><!DOCTYPE example SYSTEM "http://example.com/example.dtd">'
+        with self.assertRaises(DTDForbidden):
+            next(serializers.deserialize('xml', xml))

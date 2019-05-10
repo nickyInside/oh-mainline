@@ -1,16 +1,23 @@
 import gc
 import sys
+import time
 
-from django.dispatch import Signal
+from django.dispatch import Signal, receiver
 from django.utils import unittest
-import django.utils.copycompat as copy
+
 
 if sys.platform.startswith('java'):
     def garbage_collect():
-        """Run the garbage collector and wait a bit to let it do his work"""
-        import time
+        # Some JVM GCs will execute finalizers in a different thread, meaning
+        # we need to wait for that to complete before we go on looking for the
+        # effects of that.
         gc.collect()
         time.sleep(0.1)
+elif hasattr(sys, "pypy_version_info"):
+    def garbage_collect():
+        # Collecting weakreferences can take two collections on PyPy.
+        gc.collect()
+        gc.collect()
 else:
     def garbage_collect():
         gc.collect()
@@ -26,6 +33,8 @@ class Callable(object):
         return val
 
 a_signal = Signal(providing_args=["val"])
+b_signal = Signal(providing_args=["val"])
+c_signal = Signal(providing_args=["val"])
 
 class DispatcherTests(unittest.TestCase):
     """Test suite for dispatcher (barely started)"""
@@ -117,8 +126,39 @@ class DispatcherTests(unittest.TestCase):
         a_signal.disconnect(receiver_3)
         self._testIsClean(a_signal)
 
-def getSuite():
-    return unittest.makeSuite(DispatcherTests,'test')
+    def test_has_listeners(self):
+        self.assertFalse(a_signal.has_listeners())
+        self.assertFalse(a_signal.has_listeners(sender=object()))
+        receiver_1 = Callable()
+        a_signal.connect(receiver_1)
+        self.assertTrue(a_signal.has_listeners())
+        self.assertTrue(a_signal.has_listeners(sender=object()))
+        a_signal.disconnect(receiver_1)
+        self.assertFalse(a_signal.has_listeners())
+        self.assertFalse(a_signal.has_listeners(sender=object()))
 
-if __name__ == "__main__":
-    unittest.main()
+
+class ReceiverTestCase(unittest.TestCase):
+    """
+    Test suite for receiver.
+
+    """
+    def testReceiverSingleSignal(self):
+        @receiver(a_signal)
+        def f(val, **kwargs):
+            self.state = val
+        self.state = False
+        a_signal.send(sender=self, val=True)
+        self.assertTrue(self.state)
+
+    def testReceiverSignalList(self):
+        @receiver([a_signal, b_signal, c_signal])
+        def f(val, **kwargs):
+            self.state.append(val)
+        self.state = []
+        a_signal.send(sender=self, val='a')
+        c_signal.send(sender=self, val='c')
+        b_signal.send(sender=self, val='b')
+        self.assertIn('a', self.state)
+        self.assertIn('b', self.state)
+        self.assertIn('c', self.state)

@@ -1,5 +1,9 @@
+from __future__ import absolute_import
+
 from django.test import TestCase
-from regressiontests.model_permalink.models import Guitarist
+
+from .models import Guitarist
+
 
 class PermalinkTests(TestCase):
     urls = 'regressiontests.model_permalink.urls'
@@ -12,3 +16,12 @@ class PermalinkTests(TestCase):
         "Methods using the @permalink decorator retain their docstring."
         g = Guitarist(name='Adrien Moignard', slug='adrienmoignard')
         self.assertEqual(g.url.__doc__, "Returns the URL for this guitarist.")
+
+    def test_wrapped_attribute(self):
+        """
+        Methods using the @permalink decorator can have attached attributes
+        from other decorators
+        """
+        g = Guitarist(name='Adrien Moignard', slug='adrienmoignard')
+        self.assertTrue(hasattr(g.url_with_attribute, 'attribute'))
+        self.assertEqual(g.url_with_attribute.attribute, 'value')

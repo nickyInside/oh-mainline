@@ -1,5 +1,3 @@
-from django.test import TestCase
-from django.utils import unittest
+from __future__ import absolute_import
 
-# just import your tests here
-from us.tests import *
+from .generic.tests import GenericLocalFlavorTests

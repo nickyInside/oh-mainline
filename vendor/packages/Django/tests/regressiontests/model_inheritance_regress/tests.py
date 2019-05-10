@@ -1,17 +1,19 @@
 """
-Regression tests for Model inheritance behaviour.
+Regression tests for Model inheritance behavior.
 """
+from __future__ import absolute_import, unicode_literals
 
 import datetime
 from operator import attrgetter
+from django import forms
 
 from django.test import TestCase
 
-from models import (Place, Restaurant, ItalianRestaurant, ParkingLot,
+from .models import (Place, Restaurant, ItalianRestaurant, ParkingLot,
     ParkingLot2, ParkingLot3, Supplier, Wholesaler, Child, SelfRefParent,
     SelfRefChild, ArticleWithAuthor, M2MChild, QualityControl, DerivedM,
     Person, BirthdayParty, BachelorParty, MessyBachelorParty,
-    InternalCertificationAudit, BusStation, TrainStation)
+    InternalCertificationAudit, BusStation, TrainStation, User, Profile)
 
 
 class ModelInheritanceTest(TestCase):
@@ -19,7 +21,7 @@ class ModelInheritanceTest(TestCase):
         # Regression for #7350, #7202
         # Check that when you create a Parent object with a specific reference
         # to an existent child instance, saving the Parent doesn't duplicate
-        # the child. This behaviour is only activated during a raw save - it
+        # the child. This behavior is only activated during a raw save - it
         # is mostly relevant to deserialization, but any sort of CORBA style
         # 'narrow()' API would require a similar approach.
 
@@ -50,14 +52,14 @@ class ModelInheritanceTest(TestCase):
 
         dicts = list(Restaurant.objects.values('name','serves_hot_dogs'))
         self.assertEqual(dicts, [{
-            'name': u"Guido's House of Pasta",
+            'name': "Guido's House of Pasta",
             'serves_hot_dogs': True
         }])
 
         dicts = list(ItalianRestaurant.objects.values(
             'name','serves_hot_dogs','serves_gnocchi'))
         self.assertEqual(dicts, [{
-            'name': u"Guido's House of Pasta",
+            'name': "Guido's House of Pasta",
             'serves_gnocchi': True,
             'serves_hot_dogs': True,
         }])
@@ -65,7 +67,7 @@ class ModelInheritanceTest(TestCase):
         dicts = list(ParkingLot.objects.values('name','capacity'))
         self.assertEqual(dicts, [{
             'capacity': 100,
-            'name': u'Main St',
+            'name': 'Main St',
         }])
 
         # You can also update objects when using a raw save.
@@ -92,14 +94,14 @@ class ModelInheritanceTest(TestCase):
 
         dicts = list(Restaurant.objects.values('name','serves_hot_dogs'))
         self.assertEqual(dicts, [{
-            'name': u"Guido's All New House of Pasta",
+            'name': "Guido's All New House of Pasta",
             'serves_hot_dogs': False,
         }])
 
         dicts = list(ItalianRestaurant.objects.values(
             'name', 'serves_hot_dogs', 'serves_gnocchi'))
         self.assertEqual(dicts, [{
-            'name': u"Guido's All New House of Pasta",
+            'name': "Guido's All New House of Pasta",
             'serves_gnocchi': False,
             'serves_hot_dogs': False,
         }])
@@ -107,7 +109,7 @@ class ModelInheritanceTest(TestCase):
         dicts = list(ParkingLot.objects.values('name','capacity'))
         self.assertEqual(dicts, [{
             'capacity': 50,
-            'name': u'Derelict lot',
+            'name': 'Derelict lot',
         }])
 
         # If you try to raw_save a parent attribute onto a child object,
@@ -121,7 +123,7 @@ class ModelInheritanceTest(TestCase):
         dicts = list(ItalianRestaurant.objects.values(
             'name','serves_hot_dogs','serves_gnocchi'))
         self.assertEqual(dicts, [{
-            'name': u"Guido's All New House of Pasta",
+            'name': "Guido's All New House of Pasta",
             'serves_gnocchi': False,
             'serves_hot_dogs': False,
         }])
@@ -369,7 +371,7 @@ class ModelInheritanceTest(TestCase):
         # verbose_name.
         self.assertEqual(
                 InternalCertificationAudit._meta.verbose_name_plural,
-                u'Audits'
+                'Audits'
         )
 
     def test_inherited_nullable_exclude(self):
@@ -406,3 +408,17 @@ class ModelInheritanceTest(TestCase):
         )
         self.assertIs(BusStation._meta.pk.model, BusStation)
         self.assertIs(TrainStation._meta.pk.model, TrainStation)
+
+    def test_inherited_unique_field_with_form(self):
+        """
+        Test that a model which has different primary key for the parent model
+        passes unique field checking correctly. Refs #17615.
+        """
+        class ProfileForm(forms.ModelForm):
+            class Meta:
+                model = Profile
+        User.objects.create(username="user_only")
+        p = Profile.objects.create(username="user_with_profile")
+        form = ProfileForm({'username': "user_with_profile", 'extra': "hello"},
+                           instance=p)
+        self.assertTrue(form.is_valid())

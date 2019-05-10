@@ -8,7 +8,8 @@ This code is licenced under the New BSD License.
 var providers_large = {
   google: {
     name: 'Google',
-    url: 'https://www.google.com/accounts/o8/id'
+    url: null,
+    click_selector: '#js-google-oauth2'
   },
   yahoo: {
     name: 'Yahoo',      
@@ -85,11 +86,7 @@ var providers_small = {
 var providers = $.extend({}, providers_large, providers_small);
 
 var openid = {
-
-  cookie_expires: 6*30,	// 6 months.
-  cookie_name: 'openid_provider',
-  cookie_path: '/',
-
+  
   img_path: '/static/openid/images/',
 
   input_id: null,
@@ -167,11 +164,6 @@ var openid = {
             return false;
             });
 
-    var box_id = this.readCookie();
-    if (box_id) {
-      this.signin(box_id, true);
-    }  
-
   },
   getBoxHTML: function(provider, box_size, image_ext) {
 
@@ -191,7 +183,22 @@ var openid = {
     }
 
     this.highlight(box_id);
-    this.setCookie(box_id);
+
+    // Although this file is called OpenID-JQuery.js, in the OpenHatch codebase,
+    // it is the way we integrate _all_ third-party login systems.
+    //
+    // We recently added the Django app called python-social-auth,
+    // which generates URLs server-side. To integrate that into this
+    // flow, some of the providers have a 'click_selector' key in the
+    // provider object, which is the jQuery selector for an element
+    // that, when we click it, will do the right thing.
+    //
+    // We do things this way in order to make sure we properly store
+    // the ?next= parameter in the URL via the Django template.
+    if (provider['click_selector']) {
+      $(provider['click_selector'])[0].click();
+      return;
+    }
 
     // prompt user for input?
     if (provider['label']) {
@@ -240,24 +247,7 @@ var openid = {
     // add new highlight.
     $('.'+box_id).wrap('<div id="openid_highlight"></div>');
   },
-  setCookie: function (value) {
-
-    var date = new Date();
-    date.setTime(date.getTime()+(this.cookie_expires*24*60*60*1000));
-    var expires = "; expires="+date.toGMTString();
-
-    document.cookie = this.cookie_name+"="+value+expires+"; path=" + this.cookie_path;
-  },
-  readCookie: function () {
-    var nameEQ = this.cookie_name + "=";
-    var ca = document.cookie.split(';');
-    for(var i=0;i < ca.length;i++) {
-      var c = ca[i];
-      while (c.charAt(0)==' ') c = c.substring(1,c.length);
-      if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
-    }
-    return null;
-  },
+  
   useInputBox: function (provider) {
 
     var input_area = $('#openid_input_area');

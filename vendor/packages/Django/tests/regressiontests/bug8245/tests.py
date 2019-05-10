@@ -9,20 +9,12 @@ class Bug8245Test(TestCase):
     """
     def test_bug_8245(self):
         # The first time autodiscover is called, we should get our real error.
-        try:
+        with self.assertRaises(Exception) as cm:
             admin.autodiscover()
-        except Exception, e:
-            self.assertEqual(str(e), "Bad admin module")
-        else:
-            self.fail(
-                'autodiscover should have raised a "Bad admin module" error.')
+        self.assertEqual(str(cm.exception), "Bad admin module")
 
         # Calling autodiscover again should raise the very same error it did
         # the first time, not an AlreadyRegistered error.
-        try:
+        with self.assertRaises(Exception) as cm:
             admin.autodiscover()
-        except Exception, e:
-            self.assertEqual(str(e), "Bad admin module")
-        else:
-            self.fail(
-                'autodiscover should have raised a "Bad admin module" error.')
+        self.assertEqual(str(cm.exception), "Bad admin module")

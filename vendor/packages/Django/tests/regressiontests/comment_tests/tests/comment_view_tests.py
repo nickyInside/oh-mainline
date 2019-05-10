@@ -1,10 +1,15 @@
+from __future__ import absolute_import, unicode_literals
+
 import re
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.comments import signals
 from django.contrib.comments.models import Comment
-from regressiontests.comment_tests.models import Article, Book
-from regressiontests.comment_tests.tests import CommentTestCase
+
+from . import CommentTestCase
+from ..models import Article, Book
+
 
 post_redirect_re = re.compile(r'^http://testserver/posted/\?c=(?P<pk>\d+$)')
 
@@ -49,7 +54,7 @@ class CommentViewTests(CommentTestCase):
         a = Article.objects.get(pk=1)
         data = self.getValidData(a)
         data["comment"] = "This is another comment"
-        data["object_pk"] = u'\ufffd'
+        data["object_pk"] = '\ufffd'
         response = self.client.post("/post/", data)
         self.assertEqual(response.status_code, 400)
 
@@ -217,6 +222,13 @@ class CommentViewTests(CommentTestCase):
         match = re.search(r"^http://testserver/somewhere/else/\?c=\d+$", location)
         self.assertTrue(match != None, "Unexpected redirect location: %s" % location)
 
+        data["next"] = "http://badserver/somewhere/else/"
+        data["comment"] = "This is another comment with an unsafe next url"
+        response = self.client.post("/post/", data)
+        location = response["Location"]
+        match = post_redirect_re.match(location)
+        self.assertTrue(match != None, "Unsafe redirection to: %s" % location)
+
     def testCommentDoneView(self):
         a = Article.objects.get(pk=1)
         data = self.getValidData(a)
@@ -253,7 +265,7 @@ class CommentViewTests(CommentTestCase):
         data["comment"] = "This is another comment"
         response = self.client.post("/post/", data)
         location = response["Location"]
-        broken_location = location + u"\ufffd"
+        broken_location = location + "\ufffd"
         response = self.client.get(broken_location)
         self.assertEqual(response.status_code, 200)
 

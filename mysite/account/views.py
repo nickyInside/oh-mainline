@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Imports {{{
 from django.http import HttpResponse, HttpResponseRedirect
 import django.contrib.auth
 from django.contrib.auth.decorators import login_required
@@ -45,11 +44,10 @@ import mysite.profile.views
 # Let's fix this soon.
 from mysite.base.decorators import view
 import django.contrib.auth.views
-# }}}
 
+logger = logging.getLogger(__name__)
 
 def signup_do(request):
-    # {{{
     post = {}
     post.update(dict(request.POST.items()))
     post['password2'] = post.get('password1', '')
@@ -67,20 +65,22 @@ def signup_do(request):
             password=password)
         django.contrib.auth.login(request, user)
 
-        # redirect to profile
-        return HttpResponseRedirect(
-            '/people/%s/' % urllib.quote(username))
+        # redirect to profile or the page that brought the user to signup page
+        next = '/people/%s/' % urllib.quote(username)
+        if request.POST.get('next'):
+            next = request.POST['next']
+        return HttpResponseRedirect(next)
 
     else:
         return mysite.account.views.signup(request, signup_form=signup_form)
-    # }}}
 
 
 def signup(request, signup_form=None):
     if signup_form is None:
         signup_form = mysite.account.forms.UserCreationFormWithEmail()
 
-    return render_response(request, 'account/signup.html', {'form': signup_form})
+    return render_response(request, 'account/signup.html',
+                           {'form': signup_form})
 
 
 @login_required
@@ -115,8 +115,8 @@ def edit_photo_do(request, mock=None):
         # "cleaning" the photo during form validation.
         valid = form.is_valid()
     except Exception, e:
-            logging.error("%s while preparing the image: %s"
-                          % (str(type(e)), str(e)))
+            logger.error("%s while preparing the image: %s" % (str(type(e)), str(e)))
+
             # Don't pass in the form. This gives the user an empty form and a
             # nice error message, instead of the displaying the details of the
             # error.
@@ -125,11 +125,9 @@ def edit_photo_do(request, mock=None):
     if valid:
         person = form.save()
         person.generate_thumbnail_from_photo()
-
-        return HttpResponseRedirect(
-            reverse(mysite.profile.views.display_person_web, kwargs={
-                    'user_to_display__username': request.user.username
-                    }))
+        url = person.get_photo_url_or_default()
+        # Removing the Redirect since it doesn't make sense in an AJAX context
+        return HttpResponse(url, mimetype="text/plain")
     else:
         return edit_photo(request, form)
 
@@ -141,15 +139,15 @@ def catch_me(request):
 @login_required
 @view
 def settings(request):
-    # {{{
     data = {}
     return (request, 'account/settings.html', data)
-    # }}}
 
 
 @login_required
 @view
-def edit_contact_info(request, edit_email_form=None, show_email_form=None, email_me_form=None):
+def edit_contact_info(request, edit_email_form=None, show_email_form=None,
+                      email_me_form=None):
+
     data = {}
 
     if request.GET.get('notification_id', None) == 'success':
@@ -201,7 +199,7 @@ def edit_contact_info_do(request):
         p.show_email = show_email_form.cleaned_data['show_email']
         p.save()
 
-        logging.debug('Changing email of user <%s> to <%s>' % (
+        logger.info('Changing email of user <%s> to <%s>' % (
             request.user, edit_email_form.cleaned_data['email']))
         edit_email_form.save()
 
@@ -216,7 +214,6 @@ def edit_contact_info_do(request):
 @login_required
 @view
 def change_password(request, change_password_form=None):
-    # {{{
 
     if change_password_form is None:
         change_password_form = django.contrib.auth.forms.PasswordChangeForm({})
@@ -232,13 +229,11 @@ def change_password(request, change_password_form=None):
     return (request, 'account/change_password.html',
             {'change_password_form': change_password_form,
              'account_notification': account_notification})
-    # }}}
 
 
 @login_required
 @view
 def edit_name(request, edit_name_form=None):
-    # {{{
 
     if edit_name_form is None:
         edit_name_form = mysite.account.forms.EditNameForm(
@@ -256,7 +251,6 @@ def edit_name(request, edit_name_form=None):
     return (request, 'account/edit_name.html',
             {'edit_name_form': edit_name_form,
              'account_notification': account_notification})
-    # }}}
 
 
 @login_required
@@ -277,18 +271,15 @@ def edit_name_do(request):
 @login_required
 @view
 def set_location(request, edit_location_form=None):
-    # {{{
 
     data = {}
     initial = {}
 
-    # If the user's location is the default one, then we create a guess.
-    if (not request.user.get_profile().location_display_name) or (
-        request.user.get_profile().location_display_name ==
+    # If the user's location is the default one, we leave it blank so
+    # that the template will use javascript to form a guess
+    if (request.user.get_profile().location_display_name ==
             mysite.profile.models.DEFAULT_LOCATION):
-        geoip_guess = mysite.profile.view_helpers.get_geoip_guess_for_ip(
-            mysite.base.middleware.get_user_ip(request))[1]
-        initial['location_display_name'] = geoip_guess
+        initial['location_display_name'] = ''
     else:
         initial['location_display_name'] = request.user.get_profile(
         ).location_display_name
@@ -306,7 +297,6 @@ def set_location(request, edit_location_form=None):
         data['account_notification'] = ''
 
     return (request, 'account/set_location.html', data)
-    # }}}
 
 
 @login_required
@@ -338,25 +328,8 @@ def set_location_do(request):
 
 
 @login_required
-def confirm_location_suggestion_do(request):
-    person = request.user.get_profile()
-    person.location_confirmed = True
-    person.save()
-    return HttpResponse()
-
-
-@login_required
-def dont_guess_location_do(request):
-    person = request.user.get_profile()
-    person.dont_guess_my_location = True
-    person.location_display_name = ''
-    person.save()
-    return HttpResponse()
-
-
-@login_required
 def change_password_do(request):
-    # {{{
+
     form = django.contrib.auth.forms.PasswordChangeForm(
         request.user, request.POST)
     if form.is_valid():
@@ -366,7 +339,6 @@ def change_password_do(request):
             reverse(change_password) + '?notification_id=success')
     else:
         return change_password(request, change_password_form=form)
-    # }}}
 
 
 @login_required
@@ -417,8 +389,8 @@ def proxyconnect_sso(request):
 
 @login_required
 def invite_someone_do(request):
-    remaining_invitations = InvitationKey.objects.remaining_invitations_for_user(
-        request.user)
+    remaining_invitations = (InvitationKey.objects.
+                             remaining_invitations_for_user(request.user))
 
     form = InvitationKeyForm(data=request.POST)
     if form.is_valid():
@@ -441,11 +413,13 @@ def invite_someone_do(request):
 
 
 @django_authopenid.views.not_authenticated
-def register(request, template_name='authopenid/complete.html',
+def register(request,
+             template_name='authopenid/complete.html',
              redirect_field_name=django.contrib.auth.REDIRECT_FIELD_NAME,
              register_form=django_authopenid.forms.OpenidRegisterForm,
              auth_form=django.contrib.auth.forms.AuthenticationForm,
-             register_account=django_authopenid.views.register_account, send_email=False,
+             register_account=django_authopenid.views.register_account,
+             send_email=False,
              extra_context=None):
     """
     register an openid.
@@ -476,9 +450,10 @@ def register(request, template_name='authopenid/complete.html',
     redirect_to = request.REQUEST.get(redirect_field_name, '')
     openid_ = request.session.get('openid', None)
     if openid_ is None or not openid_:
-        return HttpResponseRedirect("%s?%s" % (reverse('user_signin'),
-                                               urllib.urlencode({
-                                                   redirect_field_name: redirect_to})))
+        return HttpResponseRedirect(
+            "%s?%s" % (reverse('user_signin'),
+                       urllib.urlencode({redirect_field_name: redirect_to}))
+        )
 
     nickname = ''
     email = ''
@@ -486,11 +461,13 @@ def register(request, template_name='authopenid/complete.html',
         nickname = openid_.sreg.get('nickname', '')
         email = openid_.sreg.get('email', '')
     if openid_.ax is not None and not nickname or not email:
-        if openid_.ax.get('http://schema.openid.net/namePerson/friendly', False):
+        if openid_.ax.get('http://schema.openid.net/namePerson/friendly',
+                          False):
             nickname = openid_.ax.get(
                 'http://schema.openid.net/namePerson/friendly')[0]
         if openid_.ax.get('http://schema.openid.net/contact/email', False):
-            email = openid_.ax.get('http://schema.openid.net/contact/email')[0]
+            email = openid_.ax.get(
+                'http://schema.openid.net/contact/email')[0]
 
     form1 = register_form(initial={
         'username': nickname,
@@ -509,16 +486,21 @@ def register(request, template_name='authopenid/complete.html',
             if form1.is_valid():
                 user_ = register_account(form1, openid_)
 
-                extra_profile_form = mysite.account.forms.SignUpIfYouWantToHelpForm(
-                    request.POST, prefix='extra_profile_form')
+                extra_profile_form = (
+                    mysite.account.forms.SignUpIfYouWantToHelpForm(
+                        request.POST,
+                        prefix='extra_profile_form')
+                )
                 if extra_profile_form.is_valid():
                     person = user_.get_profile()
                     method2contact_info = {
                         'forwarder': 'You can reach me by email at $fwd',
                         'public_email': 'You can reach me by email at %s' % user_.email,
                     }
-                    info = method2contact_info[extra_profile_form.cleaned_data[
-                        'how_should_people_contact_you']]
+                    info = (
+                        method2contact_info[extra_profile_form.cleaned_data[
+                            'how_should_people_contact_you']]
+                    )
                     person.contact_blurb = info
                     person.save()
 
@@ -544,11 +526,10 @@ def register(request, template_name='authopenid/complete.html',
         redirect_field_name: redirect_to,
         'nickname': nickname,
         'email': email
-    }, context_instance=django_authopenid.views._build_context(request, extra_context=extra_context))
+    }, context_instance=django_authopenid.views._build_context(
+        request, extra_context=extra_context))
 
-# We use this "not_authenticated" wrapper so that if you *are* logged in, you go
-# straight to the ?next= value.
+# We use this "not_authenticated" wrapper so that if you *are* logged in,
+# you go straight to the ?next= value.
 login = django_authopenid.views.not_authenticated(
     django.contrib.auth.views.login)
-
-# vim: ai ts=3 sts=4 et sw=4 nu

@@ -1,10 +1,17 @@
+from __future__ import absolute_import
+
+from copy import deepcopy
 from datetime import datetime
+
+from django.core.exceptions import MultipleObjectsReturned, FieldError
 from django.test import TestCase
-from django.core.exceptions import FieldError
-from models import Article, Reporter
+from django.utils import six
+from django.utils.translation import ugettext_lazy
+
+from .models import Article, Reporter
+
 
 class ManyToOneTests(TestCase):
-
     def setUp(self):
         # Create a few Reporters.
         self.r = Reporter(first_name='John', last_name='Smith', email='john@example.com')
@@ -63,7 +70,8 @@ class ManyToOneTests(TestCase):
         self.assertQuerysetEqual(self.r2.article_set.all(), ["<Article: Paul's story>"])
 
         # Adding an object of the wrong type raises TypeError.
-        self.assertRaises(TypeError, self.r.article_set.add, self.r2)
+        with six.assertRaisesRegex(self, TypeError, "'Article' instance expected, got <Reporter.*"):
+            self.r.article_set.add(self.r2)
         self.assertQuerysetEqual(self.r.article_set.all(),
             [
                 "<Article: John's second story>",
@@ -170,7 +178,7 @@ class ManyToOneTests(TestCase):
         # ... and should work fine with the unicode that comes out of forms.Form.cleaned_data
         self.assertQuerysetEqual(
             Article.objects.filter(reporter__first_name__exact='John'
-                                  ).extra(where=["many_to_one_reporter.last_name='%s'" % u'Smith']),
+                                  ).extra(where=["many_to_one_reporter.last_name='%s'" % 'Smith']),
             [
                 "<Article: John's second story>",
                 "<Article: This is a test>",
@@ -226,10 +234,6 @@ class ManyToOneTests(TestCase):
                 "<Article: John's second story>",
                 "<Article: This is a test>",
             ])
-        # You need two underscores between "reporter" and "id" -- not one.
-        self.assertRaises(FieldError, Article.objects.filter, reporter_id__exact=self.r.id)
-        # You need to specify a comparison clause
-        self.assertRaises(FieldError, Article.objects.filter, reporter_id=self.r.id)
 
     def test_reverse_selects(self):
         a3 = Article.objects.create(id=None, headline="Third article",
@@ -297,7 +301,7 @@ class ManyToOneTests(TestCase):
         # It's possible to use values() calls across many-to-one relations.
         # (Note, too, that we clear the ordering here so as not to drag the
         # 'headline' field into the columns being used to determine uniqueness)
-        d = {'reporter__first_name': u'John', 'reporter__last_name': u'Smith'}
+        d = {'reporter__first_name': 'John', 'reporter__last_name': 'Smith'}
         self.assertEqual([d],
             list(Article.objects.filter(reporter=self.r).distinct().order_by()
                  .values('reporter__first_name', 'reporter__last_name')))
@@ -368,5 +372,68 @@ class ManyToOneTests(TestCase):
         # Regression for #12876 -- Model methods that include queries that
         # recursive don't cause recursion depth problems under deepcopy.
         self.r.cached_query = Article.objects.filter(reporter=self.r)
-        from copy import deepcopy
         self.assertEqual(repr(deepcopy(self.r)), "<Reporter: John Smith>")
+
+    def test_explicit_fk(self):
+        # Create a new Article with get_or_create using an explicit value
+        # for a ForeignKey.
+        a2, created = Article.objects.get_or_create(id=None,
+                                                    headline="John's second test",
+                                                    pub_date=datetime(2011, 5, 7),
+                                                    reporter_id=self.r.id)
+        self.assertTrue(created)
+        self.assertEqual(a2.reporter.id, self.r.id)
+
+        # You can specify filters containing the explicit FK value.
+        self.assertQuerysetEqual(
+            Article.objects.filter(reporter_id__exact=self.r.id),
+            [
+                "<Article: John's second test>",
+                "<Article: This is a test>",
+            ])
+
+        # Create an Article by Paul for the same date.
+        a3 = Article.objects.create(id=None, headline="Paul's commentary",
+                                    pub_date=datetime(2011, 5, 7),
+                                    reporter_id=self.r2.id)
+        self.assertEqual(a3.reporter.id, self.r2.id)
+
+        # Get should respect explicit foreign keys as well.
+        self.assertRaises(MultipleObjectsReturned,
+                          Article.objects.get, reporter_id=self.r.id)
+        self.assertEqual(repr(a3),
+                         repr(Article.objects.get(reporter_id=self.r2.id,
+                                             pub_date=datetime(2011, 5, 7))))
+
+    def test_manager_class_caching(self):
+        r1 = Reporter.objects.create(first_name='Mike')
+        r2 = Reporter.objects.create(first_name='John')
+
+        # Same twice
+        self.assertTrue(r1.article_set.__class__ is r1.article_set.__class__)
+
+        # Same as each other
+        self.assertTrue(r1.article_set.__class__ is r2.article_set.__class__)
+
+    def test_create_relation_with_ugettext_lazy(self):
+        reporter = Reporter.objects.create(first_name='John',
+                                           last_name='Smith',
+                                           email='john.smith@example.com')
+        lazy = ugettext_lazy('test')
+        reporter.article_set.create(headline=lazy,
+                                    pub_date=datetime(2011, 6, 10))
+        notlazy = six.text_type(lazy)
+        article = reporter.article_set.get()
+        self.assertEqual(article.headline, notlazy)
+
+    def test_values_list_exception(self):
+        expected_message = "Cannot resolve keyword 'notafield' into field. Choices are: %s"
+
+        self.assertRaisesMessage(FieldError,
+                                 expected_message % ', '.join(Reporter._meta.get_all_field_names()),
+                                 Article.objects.values_list,
+                                 'reporter__notafield')
+        self.assertRaisesMessage(FieldError,
+                                 expected_message % ', '.join(['EXTRA',] + Article._meta.get_all_field_names()),
+                                 Article.objects.extra(select={'EXTRA': 'EXTRA_SELECT'}).values_list,
+                                 'notafield')
